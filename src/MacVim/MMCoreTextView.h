@@ -39,7 +39,6 @@
     unsigned                    maxlen;
     CGGlyph                     *glyphs;
     CGPoint                     *positions;
-    NSMutableArray              *fontCache;
 
     // Issue draws onto an CGImage that caches the drawn results instead of
     // directly in drawRect:. This is the default behavior in cases where simply
