@@ -1763,40 +1763,6 @@ attributedStringForString(NSString *string, const CTFontRef font,
 }
 
     static UniCharCount
-fetchGlyphsAndAdvances(const CTLineRef line, CGGlyph *glyphs, CGSize *advances,
-                       CGPoint *positions, UniCharCount length)
-{
-    NSArray *glyphRuns = (NSArray*)CTLineGetGlyphRuns(line);
-
-    // get a hold on the actual character widths and glyphs in line
-    UniCharCount offset = 0;
-    for (id item in glyphRuns) {
-        CTRunRef run  = (CTRunRef)item;
-        CFIndex count = CTRunGetGlyphCount(run);
-
-        if (count > 0) {
-            if (count > length - offset)
-                count = length - offset;
-
-            CFRange range = CFRangeMake(0, count);
-
-            if (glyphs != NULL)
-                CTRunGetGlyphs(run, range, &glyphs[offset]);
-            if (advances != NULL)
-                CTRunGetAdvances(run, range, &advances[offset]);
-            if (positions != NULL)
-                CTRunGetPositions(run, range, &positions[offset]);
-
-            offset += count;
-            if (offset >= length)
-                break;
-        }
-    }
-
-    return offset;
-}
-
-    static UniCharCount
 gatherGlyphs(CGGlyph glyphs[], UniCharCount count)
 {
     // Gather scattered glyphs that was happended by Surrogate pair chars
@@ -1812,31 +1778,59 @@ gatherGlyphs(CGGlyph glyphs[], UniCharCount count)
     return glyphCount;
 }
 
-    static UniCharCount
-composeGlyphsForChars(const unichar *chars, CGGlyph *glyphs,
-                      CGPoint *positions, UniCharCount length, CTFontRef font,
-                      BOOL isComposing, BOOL useLigatures)
+    static void
+drawGlyphsForLine(const CTLineRef line, CGGlyph *glyphs, CGPoint *positions,
+                  UniCharCount length, CGContextRef context, BOOL isComposing)
+{
+    NSArray *glyphRuns = (NSArray*)CTLineGetGlyphRuns(line);
+
+    // get a hold on the actual character widths and glyphs in line
+    UniCharCount offset = 0;
+    for (id item in glyphRuns) {
+        CTRunRef run  = (CTRunRef)item;
+        CFIndex count = CTRunGetGlyphCount(run);
+
+        if (count > 0) {
+            if (count > length - offset)
+                count = length - offset;
+
+            CFRange range = CFRangeMake(0, count);
+
+            CTRunGetGlyphs(run, range, &glyphs[offset]);
+            if (isComposing)
+                CTRunGetPositions(run, range, &positions[offset]);
+
+            CTFontRef fontRef = CFDictionaryGetValue(CTRunGetAttributes(run),
+                                                     kCTFontAttributeName);
+
+            CTFontDrawGlyphs(fontRef, &glyphs[offset], &positions[offset],
+                             count, context);
+
+            offset += count;
+            if (offset >= length)
+                break;
+        }
+    }
+}
+
+    static void
+drawGlyphsForChars(const unichar *chars, CGGlyph *glyphs, CGPoint *positions,
+                   UniCharCount length, CGContextRef context,
+                   CTFontRef fontRef, BOOL isComposing, BOOL useLigatures)
 {
     memset(glyphs, 0, sizeof(CGGlyph) * length);
 
     NSString *plainText = [NSString stringWithCharacters:chars length:length];
-    CFAttributedStringRef composedText = attributedStringForString(plainText,
-                                                                   font,
-                                                                   useLigatures);
+    CFAttributedStringRef attributedString =
+        attributedStringForString(plainText, fontRef, useLigatures);
 
-    CTLineRef line = CTLineCreateWithAttributedString(composedText);
+    CTLineRef line = CTLineCreateWithAttributedString(attributedString);
 
     // get the (composing)glyphs and advances for the new text
-    UniCharCount offset = fetchGlyphsAndAdvances(line, glyphs, NULL,
-                                                 isComposing ? positions : NULL,
-                                                 length);
+    drawGlyphsForLine(line, glyphs, positions, length, context, isComposing);
 
-    CFRelease(composedText);
+    CFRelease(attributedString);
     CFRelease(line);
-
-    // as ligatures composing characters it is required to adjust the
-    // original length value
-    return offset;
 }
 
     static void
@@ -1848,10 +1842,7 @@ recurseDraw(const unichar *chars, CGGlyph *glyphs, CGPoint *positions,
     // will be renamed in future.
     if (CTFontGetGlyphsForCharacters(fontRef, chars, glyphs, length)) {
         // All chars were mapped to glyphs, so draw all at once and return.
-        length = isComposing || useLigatures
-                ? composeGlyphsForChars(chars, glyphs, positions, length,
-                                        fontRef, isComposing, useLigatures)
-                : gatherGlyphs(glyphs, length);
+        length = gatherGlyphs(glyphs, length);
         CTFontDrawGlyphs(fontRef, glyphs, positions, length, context);
         return;
     }
@@ -2054,8 +2045,12 @@ recurseDraw(const unichar *chars, CGGlyph *glyphs, CGPoint *positions,
     }
 
     CGContextSetTextPosition(context, x, y+fontDescent);
-    recurseDraw(chars, glyphs, positions, length, context, fontRef, fontCache,
-                composing, ligatures);
+    if (composing || ligatures)
+        drawGlyphsForChars(chars, glyphs, positions, length, context, fontRef,
+                           composing, ligatures);
+    else
+        recurseDraw(chars, glyphs, positions, length, context, fontRef,
+                    fontCache, composing, ligatures);
 
     CFRelease(fontRef);
     if (thinStrokes)
