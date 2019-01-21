@@ -1791,6 +1791,16 @@ drawGlyphsForChars(const unichar *chars, CGGlyph *glyphs, CGPoint *positions,
 {
     memset(glyphs, 0, sizeof(CGGlyph) * length);
 
+    if (!isComposing && !useLigatures) {
+        if (CTFontGetGlyphsForCharacters(font, chars, glyphs, length)) {
+            CFIndex count = gatherGlyphs(glyphs, length);
+
+            if (count > 0)
+                CTFontDrawGlyphs(font, glyphs, positions, count, context);
+            return;
+        }
+    }
+
     NSString *plainText = [NSString stringWithCharacters:chars length:length];
     CFAttributedStringRef attributedString =
         attributedStringForString(plainText, font, useLigatures);
