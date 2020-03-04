@@ -140,7 +140,7 @@ func Test_pattern_compile_speed()
   let start = reltime()
   " this used to be very slow, not it should be about a second
   set spc=\\v(((((Nxxxxxxx&&xxxx){179})+)+)+){179}
-  call assert_inrange(0.01, 10.0, reltimefloat(reltime(start)))
+  call assert_inrange(0.01, 10.0, Reltimefloat(reltime(start)))
   set spc=
 endfunc
 

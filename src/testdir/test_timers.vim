@@ -304,7 +304,7 @@ func Test_timer_getchar_zero()
   let start = reltime()
   let id = timer_start(20, {-> feedkeys('x', 'L')})
   let c = 0
-  while c == 0 && reltimefloat(reltime(start)) < 0.2
+  while c == 0 && Reltimefloat(reltime(start)) < 0.2
     let c = getchar(0)
     sleep 10m
   endwhile
