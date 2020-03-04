@@ -79,6 +79,7 @@ script:
   - macvim_excmd -c 'py import sys; print("Test")'
   - macvim_excmd -c 'py3 import sys; print("Test")'
   - macvim_excmd -c 'ruby puts("Test")'
+  - ${VIMCMD} -u NONE -i NONE --not-a-term -g -f -X -V1 -es -S ci/elapsed.vim -c quit 2&>1
   - make test
   - make -C runtime/doc vimtags VIMEXE=../../src/MacVim/build/Release/MacVim.app/Contents/bin/vim
   - echo -en "travis_fold:end:test\\r\\033[0K"
