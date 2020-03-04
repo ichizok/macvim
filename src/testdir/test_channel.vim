@@ -232,7 +232,7 @@ func Ch_communicate(port)
     let start = reltime()
     call assert_equal(v:none, ch_read(handle, {'timeout': 333}))
     let elapsed = reltime(start)
-    call assert_inrange(0.3, 0.6, reltimefloat(reltime(start)))
+    call assert_inrange(0.3, 0.6, Reltimefloat(reltime(start)))
   endif
 
   " Send without waiting for a response, then wait for a response.
@@ -476,7 +476,7 @@ func Test_connect_waittime()
     call ch_close(handle)
   else
     let elapsed = reltime(start)
-    call assert_true(reltimefloat(elapsed) < 1.0)
+    call assert_true(Reltimefloat(elapsed) < 1.0)
   endif
 
   " We intend to use a socket that doesn't exist and wait for half a second
@@ -491,7 +491,7 @@ func Test_connect_waittime()
     else
       " Failed connection should wait about 500 msec.  Can be longer if the
       " computer is busy with other things.
-      call assert_inrange(0.3, 1.5, reltimefloat(reltime(start)))
+      call assert_inrange(0.3, 1.5, Reltimefloat(reltime(start)))
     endif
   catch
     if v:exception !~ 'Connection reset by peer'
@@ -1575,7 +1575,7 @@ func Test_exit_callback_interval()
   let job = [s:python, '-c', 'import time;time.sleep(0.5)']->job_start({'exit_cb': 'MyExitTimeCb'})
   let g:exit_cb_val.process = job_info(job).process
   call WaitFor('type(g:exit_cb_val.end) != v:t_number || g:exit_cb_val.end != 0')
-  let elapsed = reltimefloat(g:exit_cb_val.end)
+  let elapsed = Reltimefloat(g:exit_cb_val.end)
   call assert_true(elapsed > 0.5)
   call assert_true(elapsed < 1.0)
 
@@ -1590,7 +1590,7 @@ func Test_exit_callback_interval()
   unlet g:job
   call Standby(1000)
   if type(g:exit_cb_val.end) != v:t_number || g:exit_cb_val.end != 0
-    let elapsed = reltimefloat(g:exit_cb_val.end)
+    let elapsed = Reltimefloat(g:exit_cb_val.end)
   else
     let elapsed = 1.0
   endif

@@ -187,7 +187,7 @@ func s:WaitForCommon(expr, assert, timeout)
 
     sleep 10m
     if exists('*reltimefloat')
-      let slept = float2nr(reltimefloat(reltime(start)) * 1000)
+      let slept = float2nr(Reltimefloat(reltime(start)) * 1000)
     else
       let slept += 10
     endif
@@ -206,7 +206,7 @@ func Standby(msec)
     let start = reltime()
     let g:_standby_timer = timer_start(a:msec, function('s:feedkeys'))
     call getchar()
-    return float2nr(reltimefloat(reltime(start)) * 1000)
+    return float2nr(Reltimefloat(reltime(start)) * 1000)
   else
     execute 'sleep ' a:msec . 'm'
     return a:msec

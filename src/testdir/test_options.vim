@@ -800,7 +800,7 @@ func Test_writedelay()
   let start = reltime()
   call setline(1, repeat('x', 70))
   redraw
-  let elapsed = reltimefloat(reltime(start))
+  let elapsed = Reltimefloat(reltime(start))
   set writedelay=0
   " With 'writedelay' set should take at least 30 * 10 msec
   call assert_inrange(30 * 0.01, 999.0, elapsed)

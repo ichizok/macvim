@@ -169,6 +169,29 @@ function GetAllocId(name)
   return lnum - top - 1
 endfunc
 
+" Calibrate a elapsed time on CI system.
+let s:calibration_factor = 1.0
+
+func CalibrateSleep(sec)
+  if $CI != '' && has('mac')
+    let start = reltime()
+    for _ in range(a:sec * 10)
+      sleep 100m
+    endfor
+    let elapsed = reltimefloat(reltime(start))
+    " Trick: use 1100ms, an expected value on no-load
+    let x = (a:sec * 1100) / (elapsed * 1000)
+    let s:calibration_factor = x > 1.0 ? 1.0 : x
+  else
+    exe 'sleep' a:sec
+  endif
+endfunc
+
+" Calibrated reltimefloat().
+func Reltimefloat(time)
+  return reltimefloat(a:time) * s:calibration_factor
+endfunc
+
 func RunTheTest(test)
   echoconsole 'Executing ' . a:test
   if has('reltime')
@@ -448,6 +471,7 @@ for g:testfunc in sort(s:tests)
   let prev_error = ''
   let total_errors = []
   let g:run_nr = 1
+  let s:calibration_factor = 1.0
 
   " A test can set g:test_is_flaky to retry running the test.
   let g:test_is_flaky = 0
@@ -488,7 +512,7 @@ for g:testfunc in sort(s:tests)
       " Flakiness is often caused by the system being very busy.  Sleep a
       " couple of seconds to have a higher chance of succeeding the second
       " time.
-      sleep 2
+      call CalibrateSleep(2)
 
       let prev_error = v:errors[0]
       let v:errors = []

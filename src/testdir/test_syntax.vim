@@ -534,21 +534,21 @@ func Test_syntax_hangs()
   set nolazyredraw redrawtime=101
   syn match Error /\%#=1a*.*X\@<=b*/
   redraw
-  let elapsed = reltimefloat(reltime(start))
+  let elapsed = Reltimefloat(reltime(start))
   call assert_true(elapsed > 0.1)
   call assert_true(elapsed < 1.0)
 
   " second time syntax HL is disabled
   let start = reltime()
   redraw
-  let elapsed = reltimefloat(reltime(start))
+  let elapsed = Reltimefloat(reltime(start))
   call assert_true(elapsed < 0.1)
 
   " after CTRL-L the timeout flag is reset
   let start = reltime()
   exe "normal \<C-L>"
   redraw
-  let elapsed = reltimefloat(reltime(start))
+  let elapsed = Reltimefloat(reltime(start))
   call assert_true(elapsed > 0.1)
   call assert_true(elapsed < 1.0)
 
