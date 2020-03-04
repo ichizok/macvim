@@ -242,6 +242,9 @@ jobs:
           macvim_excmd -c 'py3 import sys; print("Test")'
           macvim_excmd -c 'ruby puts("Test")'
 
+          # Check system latency
+          macvim_excmd -S ci/measure-time.vim
+
           # Check that localized messages work by printing ':version' and checking against localized word
           macvim_excmd -c 'lang es_ES' -c 'version' | grep Enlazado
 
