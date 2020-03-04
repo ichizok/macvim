@@ -182,6 +182,7 @@ func CalibrateSleep(sec)
     " Trick: use 1100ms, an expected value on no-load
     let x = (a:sec * 1100) / (elapsed * 1000)
     let s:calibration_factor = x > 1.0 ? 1.0 : x
+    call add(s:messages, printf('Calibration factor: %f', s:calibration_factor))
   else
     exe 'sleep' a:sec
   endif
