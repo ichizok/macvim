@@ -1836,7 +1836,7 @@ drawGlyphsForChars(const unichar *chars, CGGlyph *glyphs, CGPoint *positions,
     static void
 recurseDraw(const unichar *chars, CGGlyph *glyphs, CGPoint *positions,
             UniCharCount length, CGContextRef context, CTFontRef fontRef,
-            NSMutableArray *fontCache, BOOL isComposing, BOOL useLigatures)
+            NSMutableArray *fontCache)
 {
     // Note: This function is misnamed. It does not actually use recursion and
     // will be renamed in future.
@@ -1902,16 +1902,13 @@ recurseDraw(const unichar *chars, CGGlyph *glyphs, CGPoint *positions,
             if (!fallback)
                 return;
 
-            UniCharCount actualAttemptLength = isComposing || useLigatures
-                ? composeGlyphsForChars(chars, glyphs, positions, attemptedCount,
-                                    fallback, isComposing, useLigatures)
-                : gatherGlyphs(glyphs, attemptedCount);
-            CTFontDrawGlyphs(fallback, glyphs, positions, actualAttemptLength, context);
+            CTFontDrawGlyphs(fallback, glyphs, positions,
+                             gatherGlyphs(glyphs, attemptedCount), context);
 
-            // TODO: This doesn't take into account surrogate pairs for 'p'. Clean this up.
-            // If only a portion of the invalid range was rendered above,
-            // the remaining range needs to be attempted by subsequent
-            // iterations of the draw loop.
+            // TODO: This doesn't take into account surrogate pairs for 'p'.
+            // Clean this up. If only a portion of the invalid range was
+            // rendered above, the remaining range needs to be attempted by
+            // subsequent iterations of the draw loop.
             c -= count - attemptedCount;
             g -= count - attemptedCount;
             p -= count - attemptedCount;
@@ -2050,7 +2047,7 @@ recurseDraw(const unichar *chars, CGGlyph *glyphs, CGPoint *positions,
                            composing, ligatures);
     else
         recurseDraw(chars, glyphs, positions, length, context, fontRef,
-                    fontCache, composing, ligatures);
+                    fontCache);
 
     CFRelease(fontRef);
     if (thinStrokes)
