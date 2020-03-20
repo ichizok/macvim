@@ -175,8 +175,8 @@ let s:calibration_factor = 10000
 func CalibrateSleep(sec)
   if $CI != '' && has('mac')
     let start = reltime()
-    for _ in range(a:sec * 10)
-      sleep 100m
+    for _ in range(a:sec * 100)
+      sleep 10m
     endfor
     let elapsed = reltimefloat(reltime(start))
     let s:calibration_factor = float2nr(elapsed * 10000 / a:sec)
