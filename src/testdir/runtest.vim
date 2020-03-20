@@ -169,8 +169,8 @@ function GetAllocId(name)
   return lnum - top - 1
 endfunc
 
-" Calibrate a elapsed time on CI system.
-let s:calibration_factor = 1.0
+" Calibrate a elapsed time (per 10000us) on CI system.
+let s:calibration_factor = 10000
 
 func CalibrateSleep(sec)
   if $CI != '' && has('mac')
@@ -179,10 +179,8 @@ func CalibrateSleep(sec)
       sleep 100m
     endfor
     let elapsed = reltimefloat(reltime(start))
-    " Trick: use 1100ms, an expected value on no-load
-    let x = (a:sec * 1100) / (elapsed * 1000)
-    let s:calibration_factor = x > 1.0 ? 1.0 : x
-    call add(s:messages, printf('Calibration factor: %f', s:calibration_factor))
+    let s:calibration_factor = float2nr(elapsed * 10000 / a:sec)
+    call add(s:messages, printf('Calibration factor: %f', s:calibration_factor / 10000.0))
   else
     exe 'sleep' a:sec
   endif
@@ -190,7 +188,12 @@ endfunc
 
 " Calibrated reltimefloat().
 func Reltimefloat(time)
-  return reltimefloat(a:time) * s:calibration_factor
+  let time = reltimefloat(a:time)
+  if s:calibration_factor > 10000
+    let usec = float2nr(time * 100000)
+    let time = (usec - (usec % s:calibration_factor)) / 100000.0
+  endif
+  return time
 endfunc
 
 func RunTheTest(test)
