@@ -270,6 +270,17 @@ jobs:
           make -C src/testdir clean
           make -C src testgui
 
+      - name: Upload log
+        if: failure() && matrix.xcode == ''
+        env:
+          AWS_ACCESS_KEY_ID:  ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY:  ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION:  ${{ secrets.AWS_DEFAULT_REGION }}
+          AWS_ARTIFACT_BUCKET: ichizok-ci-log
+          CI_REPOSITORY: github/${{ github.repository }}
+          CI_LOG_NAME: ${{ github.run_number }}/${{ matrix.os }}.tgz
+        run: bash ci/upload-log.sh
+
       # Creates a DMG package of MacVim. Note that this doesn't create a GitHub release for us, because we would prefer to
       # do it manually, for two reasons: 1) signing / notarization are currently done out of CI, 2) we want to manually
       # format our release notes and add pictures to make them look nice.
