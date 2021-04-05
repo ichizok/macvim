@@ -203,6 +203,7 @@ func RunTheTest(test)
       call add(s:skipped, 'SKIPPED ' . a:test . ': ' . g:skipped_reason)
     endif
   else
+    call StartLogging(a:test)
     try
       au VimLeavePre * call EarlyExit(g:testfunc)
       exe 'call ' . a:test
@@ -212,6 +213,8 @@ func RunTheTest(test)
       call add(s:skipped, 'SKIPPED ' . a:test . ': ' . substitute(v:exception, '^\S*\s\+', '',  ''))
     catch
       call add(v:errors, 'Caught exception in ' . a:test . ': ' . v:exception . ' @ ' . v:throwpoint)
+    finally
+      call StopLogging()
     endtry
   endif
 
@@ -395,6 +398,44 @@ else
     let s:fail += 1
     call add(s:errors, 'Caught exception: ' . v:exception . ' @ ' . v:throwpoint)
   endtry
+endif
+
+" Logging on Travis CI
+if $CI != ''
+  let s:topdir = expand('<sfile>:p:h')
+  let s:logdir = printf('%s/log/%s', s:topdir, fnamemodify(g:testname, ':t:r'))
+
+  if !isdirectory(s:logdir)
+    call mkdir(s:logdir, 'p')
+  endif
+
+  func StartLogging(test)
+    let s:logfile = printf('%s/%s.%s.log', s:logdir, substitute(a:test, '()$', '', ''), (has('gui_running') ? 'gui' : 'tui'))
+    if filereadable(s:logfile)
+      let s:logfile = substitute(s:logfile, '\.log\zs\%(\.\(\d\+\)\)\?$', '\=".".(str2nr(submatch(1))+1)', '')
+    endif
+    call ch_logfile(s:logfile, 'w')
+    return s:logfile
+  endfunc
+
+  func StopLogging()
+    call ch_logfile('')
+    if !empty(v:errors) && filereadable(s:logfile)
+      let tofile = s:logfile . '.failed'
+      if filereadable(tofile)
+        let tofile = substitute(tofile, '\.failed\zs\%(\.\(\d\+\)\)\?$', '\=".".(str2nr(submatch(1))+1)', '')
+      endif
+      call rename(s:logfile, tofile)
+    endif
+  endfunc
+else
+  func StartLogging(test)
+    " nop
+  endfunc
+
+  func StopLogging()
+    " nop
+  endfunc
 endif
 
 " Names of flaky tests.
