@@ -215,15 +215,31 @@ jobs:
         if: matrix.publish
         run: make -C runtime/doc vimtags VIMEXE=../../${VIM_BIN}
 
+      - name: Test GUI (on GNU Screen)
+        run: |
+          # Set up the src2 directory for testgui
+          mkdir -p src2
+          tar -c --exclude MacVim --exclude objects src | tar -xC src2 --strip-components 1
+          ln -s ../src/MacVim src2/
+          echo "altscreen on" >screenrc
+
+          screen -dmLU -c screenrc -S vim-testgui zsh -c 'time make -C src2 testgui && touch testgui_ok'
+
       - name: Test
         timeout-minutes: 20
         run: make test
 
-      - name: Test GUI
+      - name: Show test results of GUI
+        if: (!cancelled())
         timeout-minutes: 20
         run: |
-          make -C src/testdir clean
-          make -C src testgui
+          # Wait for GUI tests to finish
+          while screen -list 2>/dev/null | grep -qs vim-testgui; do sleep 1; done
+
+          cat screenlog.0
+
+          # Check if testgui succeeded
+          test -e testgui_ok
 
       # Creates a DMG package of MacVim. Note that this doesn't create a GitHub release for us, because we would prefer to
       # do it manually, for two reasons: 1) signing / notarization are currently done out of CI, 2) we want to manually
