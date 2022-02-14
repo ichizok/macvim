@@ -215,18 +215,16 @@ jobs:
         if: matrix.publish
         run: make -C runtime/doc vimtags VIMEXE=../../${VIM_BIN}
 
-      - name: Test
+      - name: Test GUI
         timeout-minutes: 20
-        run: make test
+        run: make -C src testgui
 
       - name: Check
         run: pgrep -fl Vim
 
-      - name: Test GUI
+      - name: Test
         timeout-minutes: 20
-        run: |
-          make -C src/testdir clean
-          make -C src testgui
+        run: make test
 
       # - name: Test GUI (on GNU Screen)
       #   run: |
