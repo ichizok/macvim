@@ -215,8 +215,18 @@ jobs:
         if: matrix.publish
         run: make -C runtime/doc vimtags VIMEXE=../../${VIM_BIN}
 
-      - name: Set up tmate session
-        uses: mxschmitt/action-tmate@v3
+      - name: Test
+        timeout-minutes: 20
+        run: make test
+
+      - name: Check
+        run: pgrep -fl Vim
+
+      - name: Test GUI
+        timeout-minutes: 20
+        run: |
+          make -C src/testdir clean
+          make -C src testgui
 
       # - name: Test GUI (on GNU Screen)
       #   run: |
