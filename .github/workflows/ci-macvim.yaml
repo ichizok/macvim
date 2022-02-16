@@ -235,9 +235,14 @@ jobs:
           # CI environment.
           make -C src macvim-dmg CREATEDMG_FLAGS=--skip-jenkins
 
-      - name: Upload MacVim image
+          # Set the release title and body from commit message.
+          echo "RELEASE_TITLE=$(git log -1 --format=%s)" >>$GITHUB_ENV
+          git log -1 --format=%b >release.body
+
+      - name: Release
         if: startsWith(github.ref, 'refs/tags/') && matrix.publish
-        uses: actions/upload-artifact@v2
+        uses: softprops/action-gh-release@v1
         with:
-          name: MacVim.dmg
-          path: src/MacVim/build/Release/MacVim.dmg
+          name: ${{ env.RELEASE_TITLE }}
+          body_path: release.body
+          files: src/MacVim/build/Release/MacVim.dmg
