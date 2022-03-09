@@ -223,10 +223,7 @@ jobs:
           ln -s ../src/MacVim src2/
           echo "altscreen on" >screenrc
 
-          screen -dmLU -c screenrc -S vim-testgui zsh -c 'time make -C src2 testgui && touch testgui_ok'
-
-          sleep 10
-          pgrep -fl Vim
+          screen -dmLU -c screenrc -S vim-testgui zsh -c 'time make -C src2 testgui </dev/null && touch testgui_ok'
 
       - name: Test
         timeout-minutes: 10
