@@ -540,7 +540,10 @@ EXTERN int	garbage_collect_at_exit INIT(= FALSE);
 #define t_class			(static_types[84])
 #define t_const_class		(static_types[85])
 
-EXTERN type_T static_types[86]
+#define t_typealias		(static_types[86])
+#define t_const_typealias	(static_types[87])
+
+EXTERN type_T static_types[88]
 #ifdef DO_INIT
 = {
     // 0: t_unknown
@@ -714,6 +717,10 @@ EXTERN type_T static_types[86]
     // 84: t_class
     {VAR_CLASS, 0, 0, TTFLAG_STATIC, NULL, NULL, NULL},
     {VAR_CLASS, 0, 0, TTFLAG_STATIC|TTFLAG_CONST, NULL, NULL, NULL},
+
+    // 86: t_typealias
+    {VAR_TYPEALIAS, 0, 0, TTFLAG_STATIC, NULL, NULL, NULL},
+    {VAR_TYPEALIAS, 0, 0, TTFLAG_STATIC|TTFLAG_CONST, NULL, NULL, NULL},
 }
 #endif
 ;
@@ -1933,6 +1940,7 @@ EXTERN int  reset_term_props_on_termresponse INIT(= FALSE);
 EXTERN int  disable_vterm_title_for_testing INIT(= FALSE);
 EXTERN long override_sysinfo_uptime INIT(= -1);
 EXTERN int  override_autoload INIT(= FALSE);
+EXTERN int  override_defcompile INIT(= FALSE);
 EXTERN int  ml_get_alloc_lines INIT(= FALSE);
 EXTERN int  ignore_unreachable_code_for_testing INIT(= FALSE);
 

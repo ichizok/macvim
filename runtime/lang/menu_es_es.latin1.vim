@@ -1,8 +1,8 @@
 " Menu Translations:	Español
 " Previous translator:	Alejandro López-Valencia <dradul@users.sourceforge.net>
 " Last translator:	Omar Campagne Polaino <ocampagne@gmail.com>
-" Version:		7.2.245
-" Last Change:		2012 May 01
+" Version:		9.1.385
+" Last Change:		2024 May 1
 " Original translations
 
 " Quit when menu translations have already been done.
@@ -29,7 +29,7 @@ menutrans &Find\.\.\.		&Buscar\ en\ la\ ayuda
 menutrans &Credits		&Reconocimientos
 menutrans O&rphans		Ayude\ a\ los\ niños\ &huérfanos
 menutrans Co&pying		&Términos\ de\ Licencia
-menutrans Sponsor/Register	Benefactor/Regístrese
+menutrans Sponsor/Register	Benefactor/Regútrese
 menutrans &Version		&Versión\ e\ \información\ de\ configuración
 menutrans &About		&Acerca\ de\ Vim
 
@@ -75,10 +75,10 @@ menutrans Startup\ &Settings		Opciones\ de\ arranque
 menutrans &Global\ Settings		Opciones\ &globales
 
 menutrans Toggle\ Pattern\ &Highlight<Tab>:set\ hls!	Activar/Desactivar\ &resaltado\ de\ sintaxis<Tab>:set\ hls!
-menutrans Toggle\ &Ignore-case<Tab>:set\ ic!		Activar/Desactivar\ &ignorar\ mayúsculas\ y\ minúsculas<Tab>:set\ ic!
-menutrans Toggle\ &Showmatch<Tab>:set\ sm!		Activar/Desactivar\ &mostrar\ coincidencias<Tab>:set\ sm!
+menutrans Toggle\ &Ignoring\ Case<Tab>:set\ ic!		Activar/Desactivar\ &ignorar\ mayúsculas\ y\ minúsculas<Tab>:set\ ic!
+menutrans Toggle\ &Showing\ Matched\ Pairs<Tab>:set\ sm!		Activar/Desactivar\ &mostrar\ coincidencias<Tab>:set\ sm!
 
-menutrans &Context\ lines		Líneas\ de\ &contexto
+menutrans &Context\ lines		Lú‹eas\ de\ &contexto
 
 menutrans &Virtual\ Edit		Edición\ &virtual
 menutrans Never				Nunca
@@ -88,7 +88,7 @@ menutrans Block\ and\ Insert		Bloque\ e\ inserción
 menutrans Always			Siempre
 
 menutrans Toggle\ Insert\ &Mode<Tab>:set\ im!	Activar/Desactivar\ modo\ de\ in&serción<Tab>:set\ im!
-menutrans Toggle\ Vi\ C&ompatible<Tab>:set\ cp!	Activar/Desactivar\ compatiblidad\ con\ Vi<Tab>:set\ cp!
+menutrans Toggle\ Vi\ C&ompatibility<Tab>:set\ cp!	Activar/Desactivar\ compatiblidad\ con\ Vi<Tab>:set\ cp!
 
 menutrans Search\ &Path\.\.\.		Ruta\ de\ &búsqueda\.\.\.
 
@@ -107,9 +107,9 @@ let g:menutrans_tags_dialog = "Introduzca los nombres de los archivos de tags.\n
 menutrans F&ile\ Settings		Opciones\ del\ &archivo
 
 " Boolean options
-menutrans Toggle\ Line\ &Numbering<Tab>:set\ nu!	Activar/Desactivar\ &numeración\ de\ líneas<Tab>:set\ nu!
+menutrans Toggle\ Line\ &Numbering<Tab>:set\ nu!	Activar/Desactivar\ &numeración\ de\ lú‹eas<Tab>:set\ nu!
 menutrans Toggle\ &List\ Mode<Tab>:set\ list!		Activar/Desactivar\ modo\ de\ lista<Tab>:set\ list!
-menutrans Toggle\ Line\ &Wrap<Tab>:set\ wrap!		Activar/Desactivar\ &quiebre\ de\ líneas<Tab>:set\ wrap!
+menutrans Toggle\ Line\ &Wrap<Tab>:set\ wrap!		Activar/Desactivar\ &quiebre\ de\ lú‹eas<Tab>:set\ wrap!
 menutrans Toggle\ W&rap\ at\ word<Tab>:set\ lbr!	Activar/Desactivar\ quiebre\ entre\ &palabras<Tab>:set\ lbr!
 menutrans Toggle\ &expand-tab<Tab>:set\ et!		Activar/Desactivar\ &expansión\ de\ marcas\ de\ \tabulado<Tab>:set\ et!
 menutrans Toggle\ &auto-indent<Tab>:set\ ai!		Activar/Desactivar\ &auto-sangrado<Tab>:set\ ai!
@@ -121,7 +121,7 @@ menutrans &Shiftwidth			Anchura\ del\ &sangrado
 menutrans Soft\ &Tabstop		&Tabulado\ «blando»
 
 menutrans Te&xt\ Width\.\.\.		Anchura\ del\ te&xto\.\.\.
-let g:menutrans_textwidth_dialog = "Introduzca el nuevo ancho del texto (0 para desactivar el quiebre de línea): "
+let g:menutrans_textwidth_dialog = "Introduzca el nuevo ancho del texto (0 para desactivar el quiebre de lú‹ea): "
 
 menutrans &File\ Format\.\.\.		&Formato\ del\ archivo\.\.\.
 let g:menutrans_fileformat_dialog = "Seleccione el formato para escribir el archivo"
@@ -170,7 +170,7 @@ menutrans &Previous\ Error<Tab>:cp	Error\ p&revio<Tab>:cp
 menutrans &Older\ List<Tab>:cold	Lista\ de\ &viejos\ a\ nuevos<Tab>:cold
 menutrans N&ewer\ List<Tab>:cnew	Lista\ de\ &nuevos\ a\ viejos<Tab>:cnew
 menutrans Error\ &Window		Ven&tana\ de\ errores
-menutrans &Set\ Compiler		Esco&ger\ el\ compilador\ a\ usar
+menutrans Se&T\ Compiler		Esco&ger\ el\ compilador\ a\ usar
 menutrans &Convert\ to\ HEX<Tab>:%!xxd	Convertir\ a\ formato\ &hexadecimal<Tab>:%!xxd
 menutrans Conve&rt\ back<Tab>:%!xxd\ -r	&Convertir\ al\ formato\ original<Tab>:%!xxd\ -r
 
@@ -194,8 +194,8 @@ menutrans &Find\ More\ Languages		&Buscar\ otras\ lenguas
 
 " Tools.Fold Menu
 menutrans &Enable/Disable\ folds<Tab>zi		&Activar/Desactivar\ pliegues<Tab>zi
-menutrans &View\ Cursor\ Line<Tab>zv		&Ver\ línea\ del\ cursor<Tab>zv
-menutrans Vie&w\ Cursor\ Line\ only<Tab>zMzx	Ve&r\ sólo\ la\ línea\ del\ cursor<Tab>zMzx
+menutrans &View\ Cursor\ Line<Tab>zv		&Ver\ lú‹ea\ del\ cursor<Tab>zv
+menutrans Vie&w\ Cursor\ Line\ only<Tab>zMzx	Ve&r\ sólo\ la\ lú‹ea\ del\ cursor<Tab>zMzx
 menutrans C&lose\ more\ folds<Tab>zm		C&errar\ más\ pliegues<Tab>zm
 menutrans &Close\ all\ folds<Tab>zM		&Cerrar\ todos\ los\ pliegues<Tab>zM
 menutrans O&pen\ more\ folds<Tab>zr		Abrir\ &más\ pliegues<Tab>zr
@@ -221,8 +221,7 @@ menutrans &Close<Tab>:cclose	&Cerrar
 
 " Names for buffer menu.
 menutrans &Buffers		&Buffers
-menutrans &Refresh\ menu	&Refrescar\ menú
-menutrans &Delete		&Suprimir
+menutrans &Refresh\ menu	&Refrescar\ menmenutrans &Delete		&Suprimir
 menutrans &Alternate		&Alternar
 menutrans &Next			Si&guiente
 menutrans &Previous		&Previo
@@ -246,9 +245,9 @@ menutrans Rotate\ &Up<Tab>^WR		&Rotar\ hacia\ arriba<Tab>^WR
 menutrans Rotate\ &Down<Tab>^Wr		Rotar\ hacia\ a&bajo<Tab>^Wr
 menutrans &Equal\ Size<Tab>^W=		Mismo\ &tamaño<Tab>^W=
 menutrans &Max\ Height<Tab>^W_		Altura\ &máxima<Tab>^W_
-menutrans M&in\ Height<Tab>^W1_		Altura\ mí&nima<Tab>^W1_
-menutrans Max\ &Width<Tab>^W\|		Anchura\ má&xima<Tab>^W\|
-menutrans Min\ Widt&h<Tab>^W1\|		Anc&hura\ mínima<Tab>^W1\|
+menutrans M&in\ Height<Tab>^W1_		Altura\ mnima<Tab>^W1_
+menutrans Max\ &Width<Tab>^W\|		Anchura\ mxima<Tab>^W\|
+menutrans Min\ Widt&h<Tab>^W1\|		Anc&hura\ mú‹ima<Tab>^W1\|
 
 " The popup menu
 menutrans &Undo			&Deshacer
@@ -258,7 +257,7 @@ menutrans &Paste		&Pegar
 menutrans &Delete		&Borrar
 menutrans Select\ Blockwise	Seleccionar\ por\ bloque
 menutrans Select\ &Word		Seleccionar\ &palabra
-menutrans Select\ &Line		Seleccionar\ una\ &línea
+menutrans Select\ &Line		Seleccionar\ una\ &lú‹ea
 menutrans Select\ &Block	Seleccionar\ un\ &bloque
 menutrans Select\ &All		Seleccionar\ &todo
 
@@ -285,10 +284,10 @@ if has("toolbar")
       tmenu ToolBar.New		Ventana nueva
       tmenu ToolBar.WinSplit	Dividir ventana
       tmenu ToolBar.WinMax	Altura máxima
-      tmenu ToolBar.WinMin	Altura mínima
+      tmenu ToolBar.WinMin	Altura mú‹ima
       tmenu ToolBar.WinVSplit	Dividir verticalmente
       tmenu ToolBar.WinMaxWidth	Anchura máxima
-      tmenu ToolBar.WinMinWidth	Anchura mínima
+      tmenu ToolBar.WinMinWidth	Anchura mú‹ima
       tmenu ToolBar.WinClose	Cerrar ventana
     endif
     tmenu ToolBar.LoadSesn	Cargar sesión
@@ -317,7 +316,17 @@ menutrans &Highlight\ test		Prueba\ de\ &resaltado
 menutrans &Convert\ to\ HTML		&Convertir\ a\ HTML
 
 " Find Help dialog text
-let g:menutrans_help_dialog = "Introduzca un nombre de comando o palabra para obtener ayuda;\n\nAnteponga i_ para comandos de entrada (e.g.: i_CTRL-X)\nAnteponga c_ para comandos de la línea de comandos (e.g.: c_<Del>)\nAnteponga ` para un nombre de opción (e.g.: `shiftwidth`)"
+let g:menutrans_help_dialog = "Introduzca un nombre de comando o palabra para obtener ayuda;\n\nAnteponga i_ para comandos de entrada (e.g.: i_CTRL-X)\nAnteponga c_ para comandos de la lú‹ea de comandos (e.g.: c_<Del>)\nAnteponga ` para un nombre de opción (e.g.: `shiftwidth`)"
+
+menutrans Toggle\ relati&ve\ Line\ Numbering<Tab>:set\ rnu!	Activar/Desactivar\ numeración\ de\ lú‹eas\ relativa<Tab>:set\ nru!
+menutrans Toggle\ Line\ &Wrapping<Tab>:set\ wrap!		Activar/Desactivar\ ajuste\ de\ lú‹ea<Tab>:set\ wrap!
+menutrans Toggle\ W&rapping\ at\ word<Tab>:set\ lbr!		Activar/Desactivar\ envolviendo\ la\ palabra<Tab>:set\ lbr!
+menutrans Toggle\ Tab\ &Expanding<Tab>:set\ et!			Activar/Desactivar\ pestaña\ expandiéndose<Tab>:set\ et!
+menutrans Toggle\ &Auto\ Indenting<Tab>:set\ ai!		Activar/Desactivar\ sangrú}\ automática<Tab>:set\ ai!
+menutrans Toggle\ &C-Style\ Indenting<Tab>:set\ cin!		Activar/Desactivar\ Sangrú}\ estilo\ C<Tab>:set\ cin!
+menutrans &Show\ File\ Types\ in\ menu				Mostrar\ tipos\ de\ archivos\ en\ el\ menmenutrans Ma&rker						Marcador
+menutrans I&ndent						Sangrar
+menutrans E&xpression						Expresión
 
 so $VIMRUNTIME/lang/macvim_menu/menu_es_es.latin1.apple.vim
 so $VIMRUNTIME/lang/macvim_menu/menu_es_es.latin1.custom.vim

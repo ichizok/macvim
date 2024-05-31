@@ -384,6 +384,8 @@ set_init_xdg_rtp(void)
     char_u	*xdg_rtp = NULL;
     char_u	*vimrc_xdg = NULL;
 
+    // initialize chartab, so we can expand $HOME
+    (void)init_chartab();
     vimrc1 = expand_env_save((char_u *)USR_VIMRC_FILE);
     vimrc2 = expand_env_save((char_u *)USR_VIMRC_FILE2);
 
@@ -414,6 +416,14 @@ set_init_xdg_rtp(void)
 
     options[opt_idx].def_val[VI_DEFAULT] = xdg_rtp;
     p_pp = xdg_rtp;
+
+#if defined(XDG_VDIR) && defined(FEAT_SESSION)
+    if ((opt_idx = findoption((char_u *)"viewdir")) < 0)
+	goto theend;
+
+    options[opt_idx].def_val[VI_DEFAULT] = (char_u *)XDG_VDIR;
+    p_vdir = (char_u *)XDG_VDIR;
+#endif
 
 theend:
     vim_free(vimrc1);
