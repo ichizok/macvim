@@ -1321,9 +1321,11 @@ HAIKUGUI_BUNDLE =
 
 # MACVIM GUI
 MACVIMGUI_SRC	= gui.c gui_beval.c MacVim/gui_macvim.m MacVim/MMBackend.m \
-		  MacVim/MacVim.m
+		  MacVim/MacVim.m MacVim/MMSelectionInfo.m \
+		  MacVim/MMEvalResult.m
 MACVIMGUI_OBJ	= objects/gui.o objects/gui_beval.o \
-		  objects/gui_macvim.o objects/MMBackend.o objects/MacVim.o
+		  objects/gui_macvim.o objects/MMBackend.o objects/MacVim.o \
+		  objects/MMSelectionInfo.o objects/MMEvalResult.o
 MACVIMGUI_DEFS	= -DFEAT_GUI_MACVIM -Wall -Wno-unknown-pragmas -pipe
 MACVIMGUI_IPATH	=
 MACVIMGUI_LIBS_DIR =
@@ -1340,7 +1342,8 @@ MACVIMGUI_TESTARG = VIMPROG=../$(RELEASEDIR)/MacVim.app/Contents/MacOS/$(VIMTARG
 ALL_GUI_SRC  = gui.c gui_gtk.c gui_gtk_f.c gui_gtk4.c gui_gtk4_f.c gui_gtk4_cb.c gui_gtk4_da.c gui_gtk4_tb.c gui_motif.c gui_xmdlg.c gui_xmebw.c gui_gtk_x11.c gui_x11.c gui_haiku.cc
 ALL_GUI_PRO  = proto/gui.pro proto/gui_gtk.pro proto/gui_gtk4.pro proto/gui_motif.pro proto/gui_xmdlg.pro proto/gui_gtk_x11.pro proto/gui_x11.pro proto/gui_w32.pro proto/gui_photon.pro
 
-ALL_GUI_SRC  += MacVim/gui_macvim.m MacVim/MMBackend.m MacVim/MacVim.m
+ALL_GUI_SRC  += MacVim/gui_macvim.m MacVim/MMBackend.m MacVim/MacVim.m \
+		MacVim/MMSelectionInfo.m MacVim/MMEvalResult.m
 
 # }}}
 
@@ -3281,6 +3284,12 @@ objects/MMBackend.o: MacVim/MMBackend.m
 objects/MacVim.o: MacVim/MacVim.m
 	$(CCC) -o $@ MacVim/MacVim.m
 
+objects/MMSelectionInfo.o: MacVim/MMSelectionInfo.m
+	$(CCC) -o $@ MacVim/MMSelectionInfo.m
+
+objects/MMEvalResult.o: MacVim/MMEvalResult.m
+	$(CCC) -o $@ MacVim/MMEvalResult.m
+
 objects/alloc.o: alloc.c
 	$(CCC) -o $@ alloc.c
 
@@ -4671,13 +4680,16 @@ objects/gui_macvim.o: MacVim/gui_macvim.m MacVim/MMBackend.h MacVim/MacVim.h \
   regexp.h gui.h libvterm/include/vterm.h \
   libvterm/include/vterm_keycodes.h xdiff/xdiff.h xdiff/../vim.h alloc.h \
   ex_cmds.h spell.h proto.h globals.h errors.h
-objects/MMBackend.o: MacVim/MMBackend.m MacVim/MMBackend.h MacVim/MacVim.h vim.h \
+objects/MMBackend.o: MacVim/MMBackend.m MacVim/MMBackend.h MacVim/MacVim.h \
+  MacVim/MMSelectionInfo.h MacVim/MMEvalResult.h vim.h \
   protodef.h auto/config.h feature.h os_unix.h ascii.h keymap.h \
   termdefs.h macros.h option.h beval.h structs.h \
   regexp.h gui.h libvterm/include/vterm.h \
   libvterm/include/vterm_keycodes.h xdiff/xdiff.h xdiff/../vim.h alloc.h \
-  ex_cmds.h spell.h proto.h globals.h errors.h 
+  ex_cmds.h spell.h proto.h globals.h errors.h
 objects/MacVim.o: MacVim/MacVim.m MacVim/MacVim.h
+objects/MMSelectionInfo.o: MacVim/MMSelectionInfo.m MacVim/MMSelectionInfo.h
+objects/MMEvalResult.o: MacVim/MMEvalResult.m MacVim/MMEvalResult.h
 objects/json_test.o: json_test.c main.c vim.h protodef.h auto/config.h feature.h \
   os_unix.h ascii.h keymap.h termdefs.h macros.h option.h beval.h \
   structs.h regexp.h gui.h libvterm/include/vterm.h \

@@ -173,6 +173,9 @@ typedef NSString* NSAttributedStringKey;
 
 #pragma region Shared protocols
 
+@class MMSelectionInfo;
+@class MMEvalResult;
+
 //
 // This is the protocol MMBackend implements.
 //
@@ -186,16 +189,18 @@ typedef NSString* NSAttributedStringKey;
 // response within the given timeout an exception will be thrown.  Use
 // @try/@catch/@finally to deal with timeouts.
 //
+// All complex returns are NSSecureCoding-conforming DTOs so that this protocol
+// stays portable to a reply-block-only IPC transport (NSXPCConnection).
+//
 @protocol MMBackendProtocol
 - (oneway void)processInput:(int)msgid data:(in bycopy NSData *)data;
 - (oneway void)setDialogReturn:(in bycopy id)obj;
 - (NSString *)evaluateExpression:(in bycopy NSString *)expr;
-- (id)evaluateExpressionCocoa:(in bycopy NSString *)expr
-                  errorString:(out bycopy NSString **)errstr;
+- (bycopy MMEvalResult *)evaluateExpressionCocoa:(in bycopy NSString *)expr;
 - (BOOL)hasSelectedText;
 - (NSString *)selectedText;
 - (oneway void)insertOrReplaceSelectedText:(in bycopy NSString *)text;
-- (BOOL)mouseScreenposIsSelection:(int)row column:(int)column selRow:(byref int *)startRow selCol:(byref int *)startCol;
+- (bycopy MMSelectionInfo *)mouseScreenposIsSelection:(int)row column:(int)column;
 - (oneway void)acknowledgeConnection;
 @end
 

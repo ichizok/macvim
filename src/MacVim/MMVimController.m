@@ -27,6 +27,7 @@
  */
 
 #import "MMAppController.h"
+#import "MMEvalResult.h"
 #import "MMFindReplaceController.h"
 #import "MMTextView.h"
 #import "MMVimController.h"
@@ -521,13 +522,16 @@ static BOOL isUnsafeMessage(int msgid);
     id eval = nil;
 
     @try {
-        eval = [backendProxy evaluateExpressionCocoa:expr
-                                         errorString:errstr];
+        MMEvalResult *result = [backendProxy evaluateExpressionCocoa:expr];
+        eval = result.value;
+        if (errstr && result.errorString)
+            *errstr = result.errorString;
         ASLogDebug(@"eval(%@)=%@", expr, eval);
     } @catch (NSException *ex) {
         ASLogDebug(@"evaluateExpressionCocoa: failed: pid=%d id=%lu reason=%@",
                 pid, identifier, ex);
-        *errstr = [ex reason];
+        if (errstr)
+            *errstr = [ex reason];
     }
 
     return eval;

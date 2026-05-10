@@ -28,6 +28,7 @@
 #import "Miscellaneous.h"
 #import "MMAppController.h"
 #import "MMCoreTextView.h"
+#import "MMSelectionInfo.h"
 #import "MMTextViewHelper.h"
 #import "MMVimController.h"
 #import "MMWindowController.h"
@@ -1992,18 +1993,17 @@ static void rowColFromUtfRange(const Grid* grid, NSRange range,
         MMVimController *vc = [self vimController];
         id<MMBackendProtocol> backendProxy = [vc backendProxy];
         if ([backendProxy hasSelectedText]) {
-            int selRow = 0, selCol = 0;
-            const BOOL isMouseInSelection = [backendProxy mouseScreenposIsSelection:row column:col selRow:&selRow selCol:&selCol];
+            MMSelectionInfo *selInfo = [backendProxy mouseScreenposIsSelection:row column:col];
 
-            if (isMouseInSelection) {
+            if (selInfo.isSelection) {
                 NSString *selectedText = [backendProxy selectedText];
                 if (selectedText) {
                     NSAttributedString *attrText = [[[NSAttributedString alloc] initWithString:selectedText
                                                                                     attributes:@{NSFontAttributeName: font}
                                                     ] autorelease];
 
-                    const NSRect selRect = [self rectForRow:selRow
-                                                     column:selCol
+                    const NSRect selRect = [self rectForRow:selInfo.startRow
+                                                     column:selInfo.startColumn
                                                     numRows:1
                                                  numColumns:1];
 

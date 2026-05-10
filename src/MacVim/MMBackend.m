@@ -28,6 +28,8 @@
  */
 
 #import "MMBackend.h"
+#import "MMEvalResult.h"
+#import "MMSelectionInfo.h"
 #include "gui_macvim.pro"
 
 
@@ -1334,10 +1336,11 @@ static struct specialkey
     }
 }
 
-- (id)evaluateExpressionCocoa:(in bycopy NSString *)expr
-                  errorString:(out bycopy NSString **)errstr
+- (bycopy MMEvalResult *)evaluateExpressionCocoa:(in bycopy NSString *)expr
 {
-    return evalExprCocoa(expr, errstr);
+    NSString *errstr = nil;
+    id value = evalExprCocoa(expr, &errstr);
+    return [MMEvalResult resultWithValue:value errorString:errstr];
 }
 
 
@@ -1578,10 +1581,8 @@ static struct specialkey
 }
 
 /// Returns whether the provided mouse screen position is on a visually
-/// selected range of text.
-///
-/// If yes, also return the starting row/col of the selection.
-- (BOOL)mouseScreenposIsSelection:(int)row column:(int)column selRow:(byref int *)startRow selCol:(byref int *)startCol
+/// selected range of text, and if so, the starting row/col of the selection.
+- (bycopy MMSelectionInfo *)mouseScreenposIsSelection:(int)row column:(int)column
 {
     // The code here is adopted from mouse.c's handling of popup_setpos.
     // Unfortunately this logic is a little tricky to do in pure Vim script
@@ -1590,7 +1591,7 @@ static struct specialkey
     // you click on the placeholder rows after the last line (they all return
     // the same 'column').
     if (!VIsual_active)
-        return NO;
+        return [MMSelectionInfo notSelected];
 
     // We set mouse_row / mouse_col without caching/restoring, because it
     // hoenstly makes sense to update them. If in the future we want a version
@@ -1604,11 +1605,11 @@ static struct specialkey
     if (mouse_row < curwin->w_winrow
             || mouse_row > (curwin->w_winrow + curwin->w_height))
     {
-        return NO;
+        return [MMSelectionInfo notSelected];
     }
     else if (get_fpos_of_mouse(&m_pos) != IN_BUFFER)
     {
-        return NO;
+        return [MMSelectionInfo notSelected];
     }
     else if (VIsual_mode == 'V')
     {
@@ -1619,7 +1620,7 @@ static struct specialkey
                     && (m_pos.lnum < VIsual.lnum
                         || curwin->w_cursor.lnum < m_pos.lnum)))
         {
-            return NO;
+            return [MMSelectionInfo notSelected];
         }
     }
     else if ((LTOREQ_POS(curwin->w_cursor, VIsual)
@@ -1629,7 +1630,7 @@ static struct specialkey
                 && (LT_POS(m_pos, VIsual)
                     || LT_POS(curwin->w_cursor, m_pos))))
     {
-        return NO;
+        return [MMSelectionInfo notSelected];
     }
     else if (VIsual_mode == Ctrl_V)
     {
@@ -1638,10 +1639,9 @@ static struct specialkey
                  &leftcol, &rightcol, 0);
         getvcol(curwin, &m_pos, NULL, &m_pos.col, NULL, 0);
         if (m_pos.col < leftcol || m_pos.col > rightcol)
-            return NO;
+            return [MMSelectionInfo notSelected];
     }
 
-    // Now, also return the selection's coordinates back to caller
     pos_T*  visualStart = LT_POS(curwin->w_cursor, VIsual) ? &curwin->w_cursor : &VIsual;
     int     srow = 0;
     int     scol = 0, ccol = 0, ecol = 0;
@@ -1650,10 +1650,10 @@ static struct specialkey
     scol = scol > 0 ? scol - 1 : 0;
     if (VIsual_mode == 'V')
         scol = 0;
-    *startRow = srow;
-    *startCol = scol;
 
-    return YES;
+    return [MMSelectionInfo infoWithIsSelection:YES
+                                       startRow:srow
+                                    startColumn:scol];
 }
 
 - (oneway void)addReply:(in bycopy NSString *)reply
