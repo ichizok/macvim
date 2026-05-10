@@ -27,6 +27,7 @@
  */
 
 #import "MMAppController.h"
+#import "MMDORemoteEndpoint.h"
 #import "MMEvalResult.h"
 #import "MMFindReplaceController.h"
 #import "MMTextView.h"
@@ -162,7 +163,7 @@ static BOOL isUnsafeMessage(int msgid);
 
 @implementation MMVimController
 
-- (id)initWithBackend:(id)backend pid:(int)processIdentifier
+- (id)initWithBackend:(id<MMBackendEndpoint>)backend pid:(int)processIdentifier
 {
     if (!(self = [super init]))
         return nil;
@@ -190,15 +191,16 @@ static BOOL isUnsafeMessage(int msgid);
     pid = processIdentifier;
     creationDate = [[NSDate alloc] init];
 
-    NSConnection *connection = [backendProxy connectionForProxy];
+    remoteEndpoint = [[MMDORemoteEndpoint endpointForProxy:backendProxy] retain];
 
     // TODO: Check that this will not set the timeout for the root proxy
     // (in MMAppController).
-    [connection setRequestTimeout:MMBackendProxyRequestTimeout];
+    [remoteEndpoint setRequestTimeout:MMBackendProxyRequestTimeout];
 
-    [[NSNotificationCenter defaultCenter] addObserver:self
-            selector:@selector(connectionDidDie:)
-                name:NSConnectionDidDieNotification object:connection];
+    __block __unsafe_unretained MMVimController *weakSelf = self;
+    [remoteEndpoint addInvalidationHandler:^{
+        [weakSelf connectionDidDie:nil];
+    }];
 
     // Set up a main menu with only a "MacVim" menu (copied from a template
     // which itself is set up in MainMenu.nib).  The main menu is populated
@@ -238,6 +240,7 @@ static BOOL isUnsafeMessage(int msgid);
 
     [serverName release];  serverName = nil;
     [backendProxy release];  backendProxy = nil;
+    [remoteEndpoint release];  remoteEndpoint = nil;
 
     [toolbarItemDict release];  toolbarItemDict = nil;
     [toolbar release];  toolbar = nil;
@@ -467,10 +470,9 @@ static BOOL isUnsafeMessage(int msgid);
     if (timeout < 0) timeout = 0;
 
     BOOL sendOk = YES;
-    NSConnection *conn = [backendProxy connectionForProxy];
-    NSTimeInterval oldTimeout = [conn requestTimeout];
+    NSTimeInterval oldTimeout = [remoteEndpoint requestTimeout];
 
-    [conn setRequestTimeout:timeout];
+    [remoteEndpoint setRequestTimeout:timeout];
 
     @try {
         [backendProxy processInput:msgid data:data];
@@ -481,7 +483,7 @@ static BOOL isUnsafeMessage(int msgid);
                 pid, identifier, MMVimMsgIDStrings[msgid], ex);
     }
     @finally {
-        [conn setRequestTimeout:oldTimeout];
+        [remoteEndpoint setRequestTimeout:oldTimeout];
     }
 
     return sendOk;
@@ -580,9 +582,14 @@ static BOOL isUnsafeMessage(int msgid);
     }
 }
 
-- (id)backendProxy
+- (id<MMBackendEndpoint>)backendProxy
 {
     return backendProxy;
+}
+
+- (id<MMRemoteEndpoint>)remoteEndpoint
+{
+    return remoteEndpoint;
 }
 
 - (void)cleanup
@@ -1401,9 +1408,8 @@ static BOOL isUnsafeMessage(int msgid);
     // avoid waiting forever for it to finish.  We make this a synchronous call
     // so that we can be fairly certain that Vim doesn't think the dialog box
     // is still showing when MacVim has in fact already dismissed it.
-    NSConnection *conn = [backendProxy connectionForProxy];
-    NSTimeInterval oldTimeout = [conn requestTimeout];
-    [conn setRequestTimeout:MMSetDialogReturnTimeout];
+    NSTimeInterval oldTimeout = [remoteEndpoint requestTimeout];
+    [remoteEndpoint setRequestTimeout:MMSetDialogReturnTimeout];
 
     @try {
         [backendProxy setDialogReturn:path];
@@ -1418,7 +1424,7 @@ static BOOL isUnsafeMessage(int msgid);
         ASLogDebug(@"Exception: pid=%d id=%lu reason=%@", pid, identifier, ex);
     }
     @finally {
-        [conn setRequestTimeout:oldTimeout];
+        [remoteEndpoint setRequestTimeout:oldTimeout];
     }
 }
 

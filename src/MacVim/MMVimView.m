@@ -1069,22 +1069,21 @@ typedef enum: NSInteger {
 
 - (void)mouseDown:(NSEvent *)event
 {
-    // TODO: This is an ugly way of getting the connection to the backend.
-    NSConnection *connection = nil;
+    id<MMRemoteEndpoint> endpoint = nil;
     id wc = [[self window] windowController];
     if ([wc isKindOfClass:[MMWindowController class]]) {
         MMVimController *vc = [(MMWindowController*)wc vimController];
-        id proxy = [vc backendProxy];
-        connection = [(NSDistantObject*)proxy connectionForProxy];
+        endpoint = [vc remoteEndpoint];
     }
 
     // NOTE: The scroller goes into "event tracking mode" when the user clicks
     // (and holds) the mouse button.  We have to manually add the backend
     // connection to this mode while the mouse button is held, else DO messages
     // from Vim will not be processed until the mouse button is released.
-    [connection addRequestMode:NSEventTrackingRunLoopMode];
+    // (No-op on transports that don't use NSRunLoop.)
+    [endpoint addRequestRunLoopMode:NSEventTrackingRunLoopMode];
     [super mouseDown:event];
-    [connection removeRequestMode:NSEventTrackingRunLoopMode];
+    [endpoint removeRequestRunLoopMode:NSEventTrackingRunLoopMode];
 }
 
 @end // MMScroller

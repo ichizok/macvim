@@ -20,7 +20,8 @@
     NSMutableData       *drawData;
     NSConnection        *connection;
     NSConnection        *vimServerConnection;
-    id                  appProxy;
+    id<MMRemoteEndpoint> remoteEndpoint;
+    id<MMAppEndpoint>   appProxy;
     unsigned long       identifier;
     NSDictionary        *sysColorDict;
     NSDictionary        *actionDict;

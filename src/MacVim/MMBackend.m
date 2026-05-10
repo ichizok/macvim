@@ -28,6 +28,7 @@
  */
 
 #import "MMBackend.h"
+#import "MMDORemoteEndpoint.h"
 #import "MMEvalResult.h"
 #import "MMSelectionInfo.h"
 #include "gui_macvim.pro"
@@ -265,6 +266,7 @@ static struct specialkey
     [inputQueue release];  inputQueue = nil;
     [outputQueue release];  outputQueue = nil;
     [drawData release];  drawData = nil;
+    [remoteEndpoint release];  remoteEndpoint = nil;
     [connection release];  connection = nil;
     [appProxy release];  appProxy = nil;
     [actionDict release];  actionDict = nil;
@@ -434,12 +436,18 @@ static struct specialkey
     }
 
     @try {
-        [[NSNotificationCenter defaultCenter] addObserver:self
-                selector:@selector(connectionDidDie:)
-                    name:NSConnectionDidDieNotification object:connection];
+        remoteEndpoint = [[MMDORemoteEndpoint alloc] initWithConnection:connection];
 
-        appProxy = [[connection rootProxy] retain];
-        [appProxy setProtocolForProxy:@protocol(MMAppProtocol)];
+        __block __unsafe_unretained MMBackend *weakSelf = self;
+        [remoteEndpoint addInvalidationHandler:^{
+            // Forward to the legacy notification handler so existing teardown
+            // logic stays in one place during the IPC migration.
+            [weakSelf connectionDidDie:nil];
+        }];
+
+        id rootProxy = [[connection rootProxy] retain];
+        [(NSDistantObject *)rootProxy setProtocolForProxy:@protocol(MMAppProtocol)];
+        appProxy = rootProxy;
 
         // NOTE: We do not set any new timeout values for the connection to the
         // frontend.  This means that if the frontend is "stuck" (e.g. in a
@@ -2592,6 +2600,7 @@ static struct specialkey
     // IPC calls during shutdown. If other code use isValid checks this is a
     // little unnecessary, but it just helps prevent issues with code that use
     // the connection or proxy without checking for validity first.
+    [remoteEndpoint release];  remoteEndpoint = nil;
     [connection release];  connection = nil;
     [appProxy release];  appProxy = nil;
 

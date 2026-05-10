@@ -37,7 +37,8 @@
     unsigned long       identifier;
     BOOL                isInitialized;
     MMWindowController  *windowController;
-    id                  backendProxy;
+    id<MMBackendEndpoint> backendProxy;
+    id<MMRemoteEndpoint> remoteEndpoint;
     NSMenu              *mainMenu;
     NSMutableArray      *popupMenuItems;
 
@@ -62,10 +63,11 @@
 
 @property (nonatomic, readonly) BOOL isHandlingInputQueue;
 
-- (id)initWithBackend:(id)backend pid:(int)processIdentifier;
+- (id)initWithBackend:(id<MMBackendEndpoint>)backend pid:(int)processIdentifier;
 - (void)uninitialize;
 - (unsigned long)vimControllerId;
-- (id)backendProxy;
+- (id<MMBackendEndpoint>)backendProxy;
+- (id<MMRemoteEndpoint>)remoteEndpoint;
 - (int)pid;
 - (void)setServerName:(NSString *)name;
 - (NSString *)serverName;

@@ -12,6 +12,7 @@
 // MacVim processes need access to.
 
 #import <Cocoa/Cocoa.h>
+#import "MMRemoteEndpoint.h"
 
 #pragma region Backward compatibility defines
 
@@ -173,11 +174,8 @@ typedef NSString* NSAttributedStringKey;
 
 #pragma region Shared protocols
 
-@class MMSelectionInfo;
-@class MMEvalResult;
-
 //
-// This is the protocol MMBackend implements.
+// This is the wire-level protocol MMBackend implements.
 //
 // Only processInput:data: is allowed to cause state changes in Vim; all other
 // messages should only read the Vim state.  (Note that setDialogReturn: is an
@@ -189,10 +187,12 @@ typedef NSString* NSAttributedStringKey;
 // response within the given timeout an exception will be thrown.  Use
 // @try/@catch/@finally to deal with timeouts.
 //
-// All complex returns are NSSecureCoding-conforming DTOs so that this protocol
-// stays portable to a reply-block-only IPC transport (NSXPCConnection).
+// MMBackendProtocol re-declares the methods of MMBackendEndpoint with DO
+// marshaling qualifiers (oneway / in / out / bycopy).  Callers should prefer
+// the transport-neutral MMBackendEndpoint surface; this protocol exists for
+// configuring NSDistantObject via setProtocolForProxy:.
 //
-@protocol MMBackendProtocol
+@protocol MMBackendProtocol <MMBackendEndpoint>
 - (oneway void)processInput:(int)msgid data:(in bycopy NSData *)data;
 - (oneway void)setDialogReturn:(in bycopy id)obj;
 - (NSString *)evaluateExpression:(in bycopy NSString *)expr;
@@ -206,7 +206,7 @@ typedef NSString* NSAttributedStringKey;
 
 
 //
-// This is the protocol MMAppController implements.
+// This is the wire-level protocol MMAppController implements.
 //
 // It handles connections between MacVim and Vim and communication from Vim to
 // MacVim.
@@ -217,7 +217,10 @@ typedef NSString* NSAttributedStringKey;
 // but should instead delay any potential modifications (see
 // connectBackend:pid: and processInput:forIdentifier:).
 //
-@protocol MMAppProtocol
+// Same relationship as above: MMAppProtocol carries the DO marshaling hints,
+// MMAppEndpoint is the transport-neutral surface callers should prefer.
+//
+@protocol MMAppProtocol <MMAppEndpoint>
 - (unsigned long)connectBackend:(byref in id <MMBackendProtocol>)proxy pid:(int)pid;
 - (oneway void)processInput:(in bycopy NSArray *)queue
               forIdentifier:(unsigned long)identifier;

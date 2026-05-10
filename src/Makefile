@@ -1322,10 +1322,11 @@ HAIKUGUI_BUNDLE =
 # MACVIM GUI
 MACVIMGUI_SRC	= gui.c gui_beval.c MacVim/gui_macvim.m MacVim/MMBackend.m \
 		  MacVim/MacVim.m MacVim/MMSelectionInfo.m \
-		  MacVim/MMEvalResult.m
+		  MacVim/MMEvalResult.m MacVim/MMDORemoteEndpoint.m
 MACVIMGUI_OBJ	= objects/gui.o objects/gui_beval.o \
 		  objects/gui_macvim.o objects/MMBackend.o objects/MacVim.o \
-		  objects/MMSelectionInfo.o objects/MMEvalResult.o
+		  objects/MMSelectionInfo.o objects/MMEvalResult.o \
+		  objects/MMDORemoteEndpoint.o
 MACVIMGUI_DEFS	= -DFEAT_GUI_MACVIM -Wall -Wno-unknown-pragmas -pipe
 MACVIMGUI_IPATH	=
 MACVIMGUI_LIBS_DIR =
@@ -1343,7 +1344,8 @@ ALL_GUI_SRC  = gui.c gui_gtk.c gui_gtk_f.c gui_gtk4.c gui_gtk4_f.c gui_gtk4_cb.c
 ALL_GUI_PRO  = proto/gui.pro proto/gui_gtk.pro proto/gui_gtk4.pro proto/gui_motif.pro proto/gui_xmdlg.pro proto/gui_gtk_x11.pro proto/gui_x11.pro proto/gui_w32.pro proto/gui_photon.pro
 
 ALL_GUI_SRC  += MacVim/gui_macvim.m MacVim/MMBackend.m MacVim/MacVim.m \
-		MacVim/MMSelectionInfo.m MacVim/MMEvalResult.m
+		MacVim/MMSelectionInfo.m MacVim/MMEvalResult.m \
+		MacVim/MMDORemoteEndpoint.m
 
 # }}}
 
@@ -3290,6 +3292,9 @@ objects/MMSelectionInfo.o: MacVim/MMSelectionInfo.m
 objects/MMEvalResult.o: MacVim/MMEvalResult.m
 	$(CCC) -o $@ MacVim/MMEvalResult.m
 
+objects/MMDORemoteEndpoint.o: MacVim/MMDORemoteEndpoint.m
+	$(CCC) -o $@ MacVim/MMDORemoteEndpoint.m
+
 objects/alloc.o: alloc.c
 	$(CCC) -o $@ alloc.c
 
@@ -4681,6 +4686,7 @@ objects/gui_macvim.o: MacVim/gui_macvim.m MacVim/MMBackend.h MacVim/MacVim.h \
   libvterm/include/vterm_keycodes.h xdiff/xdiff.h xdiff/../vim.h alloc.h \
   ex_cmds.h spell.h proto.h globals.h errors.h
 objects/MMBackend.o: MacVim/MMBackend.m MacVim/MMBackend.h MacVim/MacVim.h \
+  MacVim/MMRemoteEndpoint.h MacVim/MMDORemoteEndpoint.h \
   MacVim/MMSelectionInfo.h MacVim/MMEvalResult.h vim.h \
   protodef.h auto/config.h feature.h os_unix.h ascii.h keymap.h \
   termdefs.h macros.h option.h beval.h structs.h \
@@ -4690,6 +4696,8 @@ objects/MMBackend.o: MacVim/MMBackend.m MacVim/MMBackend.h MacVim/MacVim.h \
 objects/MacVim.o: MacVim/MacVim.m MacVim/MacVim.h
 objects/MMSelectionInfo.o: MacVim/MMSelectionInfo.m MacVim/MMSelectionInfo.h
 objects/MMEvalResult.o: MacVim/MMEvalResult.m MacVim/MMEvalResult.h
+objects/MMDORemoteEndpoint.o: MacVim/MMDORemoteEndpoint.m \
+  MacVim/MMDORemoteEndpoint.h MacVim/MMRemoteEndpoint.h
 objects/json_test.o: json_test.c main.c vim.h protodef.h auto/config.h feature.h \
   os_unix.h ascii.h keymap.h termdefs.h macros.h option.h beval.h \
   structs.h regexp.h gui.h libvterm/include/vterm.h \

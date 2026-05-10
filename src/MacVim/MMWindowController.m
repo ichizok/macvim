@@ -1054,9 +1054,8 @@
     // in event tracking mode since then MacVim could receive DO messages at
     // unexpected times (e.g. when a key equivalent is pressed and the menu bar
     // momentarily lights up).
-    id proxy = [vimController backendProxy];
-    NSConnection *connection = [(NSDistantObject*)proxy connectionForProxy];
-    [connection addRequestMode:NSEventTrackingRunLoopMode];
+    // (No-op on transports that don't use NSRunLoop.)
+    [[vimController remoteEndpoint] addRequestRunLoopMode:NSEventTrackingRunLoopMode];
 }
 
 - (void)liveResizeDidEnd
@@ -1064,9 +1063,7 @@
     if (!setupDone) return;
 
     // See comment above regarding event tracking mode.
-    id proxy = [vimController backendProxy];
-    NSConnection *connection = [(NSDistantObject*)proxy connectionForProxy];
-    [connection removeRequestMode:NSEventTrackingRunLoopMode];
+    [[vimController remoteEndpoint] removeRequestRunLoopMode:NSEventTrackingRunLoopMode];
 
     // If we saved the original title while resizing, restore it.
     if (lastSetTitle != nil) {

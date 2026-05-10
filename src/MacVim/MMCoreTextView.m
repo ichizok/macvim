@@ -1991,7 +1991,7 @@ static void rowColFromUtfRange(const Grid* grid, NSRange range,
         // 1. If we have selected text. Proceed to see if the mouse is directly on
         // top of said selection and if so, show definition of that instead.
         MMVimController *vc = [self vimController];
-        id<MMBackendProtocol> backendProxy = [vc backendProxy];
+        id<MMBackendEndpoint> backendProxy = [vc backendProxy];
         if ([backendProxy hasSelectedText]) {
             MMSelectionInfo *selInfo = [backendProxy mouseScreenposIsSelection:row column:col];
 
