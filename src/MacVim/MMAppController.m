@@ -46,6 +46,9 @@
 #import "MMTextView.h"
 #import "MMWhatsNewController.h"
 #import "Miscellaneous.h"
+#import "MMDORemoteEndpoint.h"
+#import "MMSocketChannel.h"
+#import "MMSocketRemoteEndpoint.h"
 #import <unistd.h>
 #import <CoreServices/CoreServices.h>
 // Need Carbon for TIS...() functions
@@ -142,6 +145,11 @@ typedef struct
 - (void)reapChildProcesses:(id)sender;
 - (void)processInputQueues:(id)sender;
 - (void)addVimController:(MMVimController *)vc;
+- (unsigned long)attachBackendEndpoint:(id<MMBackendEndpoint>)backend
+                        remoteEndpoint:(id<MMRemoteEndpoint>)endpoint
+                                   pid:(int)pid;
+- (void)setupFrontendSocketListener;
+- (void)removeSocketRegistrar:(id)registrar;
 - (NSDictionary *)convertVimControllerArguments:(NSDictionary *)args
                                   toCommandLine:(NSArray **)cmdline;
 - (NSString *)workingDirectoryForArguments:(NSDictionary *)args;
@@ -163,6 +171,47 @@ fsEventCallback(ConstFSEventStreamRef streamRef,
 {
     [[MMAppController sharedInstance] handleFSEvent];
 }
+
+
+// Per-connection adapter on the GUI side of a Unix-domain-socket backend.
+// Retains its endpoint and serves the MMAppEndpoint surface (registration,
+// input queueing, server list) against the shared MMAppController.  Kept alive
+// by MMAppController's socketRegistrars list for the connection's lifetime.
+@interface MMSocketBackendRegistrar : NSObject {
+    MMAppController        *_app;       // unretained; the app outlives us
+    MMSocketRemoteEndpoint *_endpoint;  // retained
+}
+- (instancetype)initWithApp:(MMAppController *)app
+                   endpoint:(MMSocketRemoteEndpoint *)endpoint;
+@property (nonatomic, readonly) MMSocketRemoteEndpoint *endpoint;
+@end
+
+@implementation MMSocketBackendRegistrar
+- (instancetype)initWithApp:(MMAppController *)app
+                   endpoint:(MMSocketRemoteEndpoint *)endpoint
+{
+    if (!(self = [super init])) return nil;
+    _app = app;
+    _endpoint = [endpoint retain];
+    return self;
+}
+- (void)dealloc { [_endpoint release]; [super dealloc]; }
+- (MMSocketRemoteEndpoint *)endpoint { return _endpoint; }
+
+// MMAppXPC-style surface invoked by +[MMSocketAppProxy serveOpcode:...].
+- (unsigned long)registerBackendWithPid:(int)pid
+{
+    return [_app attachBackendEndpoint:[_endpoint backendProxy]
+                       remoteEndpoint:_endpoint
+                                  pid:pid];
+}
+- (void)processInput:(NSArray *)queue forIdentifier:(unsigned long)identifier
+{
+    [_app processInput:queue forIdentifier:identifier];
+}
+- (NSArray *)serverList { return [_app serverList]; }
+@end
+
 
 @implementation MMAppController
 
@@ -194,6 +243,7 @@ fsEventCallback(ConstFSEventStreamRef streamRef,
         [NSNumber numberWithBool:NO],     MMNoFontSubstitutionKey,
         [NSNumber numberWithBool:YES],    MMFontPreserveLineSpacingKey,
         [NSNumber numberWithBool:YES],    MMLoginShellKey,
+        [NSNumber numberWithBool:NO],     MMUseSocketKey,
         [NSNumber numberWithInt:MMRendererCoreText],
                                           MMRendererKey,
         [NSNumber numberWithInt:MMUntitledWindowAlways],
@@ -349,6 +399,12 @@ fsEventCallback(ConstFSEventStreamRef streamRef,
         [[NSApplication sharedApplication] terminate:nil];
     }
 
+    // Optionally publish the Unix-domain-socket rendezvous so Vim children
+    // that read MMUseSocketKey can use it instead of the deprecated DO path.
+    // The DO connection above stays registered as a fallback.
+    if ([[NSUserDefaults standardUserDefaults] boolForKey:MMUseSocketKey])
+        [self setupFrontendSocketListener];
+
     // Register help search handler to support search Vim docs via the Help menu
     [NSApp registerUserInterfaceItemSearchHandler:self];
 
@@ -374,6 +430,9 @@ fsEventCallback(ConstFSEventStreamRef streamRef,
 {
     ASLogDebug(@"");
 
+    [(MMSocketListener *)frontendSocketListener invalidate];
+    [frontendSocketListener release];  frontendSocketListener = nil;
+    [socketRegistrars release];  socketRegistrars = nil;
     [connection release];  connection = nil;
     [inputQueues release];  inputQueues = nil;
     [pidArguments release];  pidArguments = nil;
@@ -1606,27 +1665,89 @@ fsEventCallback(ConstFSEventStreamRef streamRef,
 
     [(NSDistantObject*)proxy setProtocolForProxy:@protocol(MMBackendProtocol)];
 
+    return [self attachBackendEndpoint:proxy
+                       remoteEndpoint:[MMDORemoteEndpoint endpointForProxy:proxy]
+                                  pid:pid];
+}
+
+// Shared post-handshake setup used by both the legacy DO connectBackend: and
+// the socket registration path.  Allocates the MMVimController, schedules its
+// addition to the controllers list on the main thread, and returns its id.
+- (unsigned long)attachBackendEndpoint:(id<MMBackendEndpoint>)backend
+                        remoteEndpoint:(id<MMRemoteEndpoint>)endpoint
+                                   pid:(int)pid
+{
     // NOTE: Allocate the vim controller now but don't add it to the list of
-    // controllers since this is a distributed object call and as such can
-    // arrive at unpredictable times (e.g. while iterating the list of vim
-    // controllers).
+    // controllers since this call can arrive at unpredictable times (e.g.
+    // while iterating the list of vim controllers).
     // (What if input arrives before the vim controller is added to the list of
     // controllers?  This should not be a problem since the input isn't
     // processed immediately (see processInput:forIdentifier:).)
     // Also, since the app may be multithreaded (e.g. as a result of showing
     // the open panel) we have to ensure this call happens on the main thread,
     // else there is a race condition that may lead to a crash.
-    MMVimController *vc = [[MMVimController alloc] initWithBackend:proxy
-                                                               pid:pid];
+    MMVimController *vc = [[MMVimController alloc] initWithBackend:backend
+                                                   remoteEndpoint:endpoint
+                                                              pid:pid];
     [self performSelectorOnMainThread:@selector(addVimController:)
                            withObject:vc
                         waitUntilDone:NO
                                 modes:[NSArray arrayWithObject:
                                        NSDefaultRunLoopMode]];
 
+    unsigned long vcid = [vc vimControllerId];
     [vc release];
+    return vcid;
+}
 
-    return [vc vimControllerId];
+- (void)setupFrontendSocketListener
+{
+    NSString *path = MMFrontendSocketPath();
+    MMSocketListener *listener = [MMSocketListener listenerWithPath:path];
+    if (!listener) {
+        ASLogErr(@"Failed to create frontend socket listener at %@", path);
+        return;
+    }
+    socketRegistrars = [[NSMutableArray alloc] init];
+
+    __block __unsafe_unretained MMAppController *weakSelf = self;
+    listener.acceptHandler = ^(MMSocketChannel *ch) {
+        MMSocketRemoteEndpoint *ep =
+            [[[MMSocketRemoteEndpoint alloc] initWithChannel:ch] autorelease];
+        MMSocketBackendRegistrar *reg =
+            [[[MMSocketBackendRegistrar alloc] initWithApp:weakSelf
+                                                  endpoint:ep] autorelease];
+        @synchronized (weakSelf->socketRegistrars) {
+            [weakSelf->socketRegistrars addObject:reg];
+        }
+        __block __unsafe_unretained MMSocketBackendRegistrar *weakReg = reg;
+        ep.incomingHandler = ^(uint32_t op, NSArray *args, void (^reply)(id)) {
+            // Serve on the main thread: these touch the vim controllers list
+            // and AppKit state.
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [MMSocketAppProxy serveOpcode:op args:args
+                                       target:weakReg reply:reply];
+            });
+        };
+        [ep addInvalidationHandler:^{
+            [weakSelf removeSocketRegistrar:weakReg];
+        }];
+    };
+    [listener resume];
+    frontendSocketListener = [listener retain];
+    ASLogInfo(@"Frontend socket listening at %@", path);
+}
+
+- (void)removeSocketRegistrar:(id)registrar
+{
+    // Hop to the main thread so the registrar (and its endpoint) is not
+    // deallocated on the channel's own delivery queue, which would deadlock
+    // -[MMSocketChannel invalidate]'s dispatch_sync.
+    dispatch_async(dispatch_get_main_queue(), ^{
+        @synchronized (socketRegistrars) {
+            [socketRegistrars removeObjectIdenticalTo:registrar];
+        }
+    });
 }
 
 - (oneway void)processInput:(in bycopy NSArray *)queue

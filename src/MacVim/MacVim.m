@@ -33,6 +33,10 @@ NSString *MMNoWindowKey = @"MMNoWindow";
 
 NSString *MMShareFindPboardKey = @"MMShareFindPboard";
 
+// Route frontend<->backend IPC over a Unix-domain socket instead of the
+// deprecated NSConnection (Distributed Objects).  Default off during bake-in.
+NSString *MMUseSocketKey = @"MMUseSocket";
+
 NSString *MMAutosaveRowsKey    = @"MMAutosaveRows";
 NSString *MMAutosaveColumnsKey = @"MMAutosaveColumns";
 NSString *MMRendererKey	       = @"MMRenderer";

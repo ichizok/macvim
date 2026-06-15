@@ -165,6 +165,17 @@ static BOOL isUnsafeMessage(int msgid);
 
 - (id)initWithBackend:(id<MMBackendEndpoint>)backend pid:(int)processIdentifier
 {
+    // Legacy DO entry point: derive a DO endpoint from the proxy and forward
+    // to the designated initializer.
+    return [self initWithBackend:backend
+                  remoteEndpoint:[MMDORemoteEndpoint endpointForProxy:backend]
+                             pid:processIdentifier];
+}
+
+- (id)initWithBackend:(id<MMBackendEndpoint>)backend
+       remoteEndpoint:(id<MMRemoteEndpoint>)endpoint
+                  pid:(int)processIdentifier
+{
     if (!(self = [super init]))
         return nil;
 
@@ -191,7 +202,7 @@ static BOOL isUnsafeMessage(int msgid);
     pid = processIdentifier;
     creationDate = [[NSDate alloc] init];
 
-    remoteEndpoint = [[MMDORemoteEndpoint endpointForProxy:backendProxy] retain];
+    remoteEndpoint = [endpoint retain];
 
     // TODO: Check that this will not set the timeout for the root proxy
     // (in MMAppController).

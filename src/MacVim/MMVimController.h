@@ -64,6 +64,9 @@
 @property (nonatomic, readonly) BOOL isHandlingInputQueue;
 
 - (id)initWithBackend:(id<MMBackendEndpoint>)backend pid:(int)processIdentifier;
+- (id)initWithBackend:(id<MMBackendEndpoint>)backend
+       remoteEndpoint:(id<MMRemoteEndpoint>)endpoint
+                  pid:(int)processIdentifier;
 - (void)uninitialize;
 - (unsigned long)vimControllerId;
 - (id<MMBackendEndpoint>)backendProxy;

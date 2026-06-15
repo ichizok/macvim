@@ -444,6 +444,9 @@ extern NSString *MMNoWindowKey;
 // Argument used to control MacVim sharing search text via the Find Pasteboard.
 extern NSString *MMShareFindPboardKey;
 
+// Toggle the Unix-domain-socket frontend<->backend transport (vs legacy DO).
+extern NSString *MMUseSocketKey;
+
 extern NSString *MMAutosaveRowsKey;
 extern NSString *MMAutosaveColumnsKey;
 extern NSString *MMRendererKey; // Deprecated: Non-CoreText renderer

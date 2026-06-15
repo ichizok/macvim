@@ -39,6 +39,8 @@
     };
 
     NSConnection        *connection;
+    id                  frontendSocketListener;  // MMSocketListener (when MMUseSocket)
+    NSMutableArray      *socketRegistrars;        // live socket connections
     NSMutableArray      *vimControllers;
     NSString            *openSelectionString;
     NSMutableDictionary *pidArguments;

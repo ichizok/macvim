@@ -20,6 +20,8 @@
 		AABBC0010000000000000012 /* MMSelectionInfo.m in Sources */ = {isa = PBXBuildFile; fileRef = AABBC0010000000000000011 /* MMSelectionInfo.m */; };
 		AABBC0010000000000000015 /* MMEvalResult.m in Sources */ = {isa = PBXBuildFile; fileRef = AABBC0010000000000000014 /* MMEvalResult.m */; };
 		AABBC0010000000000000019 /* MMDORemoteEndpoint.m in Sources */ = {isa = PBXBuildFile; fileRef = AABBC0010000000000000018 /* MMDORemoteEndpoint.m */; };
+		AABBC001000000000000000A2 /* MMSocketChannel.m in Sources */ = {isa = PBXBuildFile; fileRef = AABBC001000000000000000A1 /* MMSocketChannel.m */; };
+		AABBC001000000000000000A5 /* MMSocketRemoteEndpoint.m in Sources */ = {isa = PBXBuildFile; fileRef = AABBC001000000000000000A4 /* MMSocketRemoteEndpoint.m */; };
 		1D1474BC0C567A910038FA2B /* MMWindowController.m in Sources */ = {isa = PBXBuildFile; fileRef = 1D1474BA0C567A910038FA2B /* MMWindowController.m */; };
 		1D22374B0E45DF4800E6FFFF /* Advanced.png in Resources */ = {isa = PBXBuildFile; fileRef = 1D22374A0E45DF4800E6FFFF /* Advanced.png */; };
 		1D384A0E100D671700D3C22F /* KeyBinding.plist in Resources */ = {isa = PBXBuildFile; fileRef = 1D384A0D100D671700D3C22F /* KeyBinding.plist */; };
@@ -194,6 +196,10 @@
 		AABBC0010000000000000016 /* MMRemoteEndpoint.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = MMRemoteEndpoint.h; sourceTree = "<group>"; };
 		AABBC0010000000000000017 /* MMDORemoteEndpoint.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = MMDORemoteEndpoint.h; sourceTree = "<group>"; };
 		AABBC0010000000000000018 /* MMDORemoteEndpoint.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = MMDORemoteEndpoint.m; sourceTree = "<group>"; };
+		AABBC001000000000000000A0 /* MMSocketChannel.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = MMSocketChannel.h; sourceTree = "<group>"; };
+		AABBC001000000000000000A1 /* MMSocketChannel.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = MMSocketChannel.m; sourceTree = "<group>"; };
+		AABBC001000000000000000A3 /* MMSocketRemoteEndpoint.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = MMSocketRemoteEndpoint.h; sourceTree = "<group>"; };
+		AABBC001000000000000000A4 /* MMSocketRemoteEndpoint.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = MMSocketRemoteEndpoint.m; sourceTree = "<group>"; };
 		1D1474B90C567A910038FA2B /* MMWindowController.h */ = {isa = PBXFileReference; fileEncoding = 30; lastKnownFileType = sourcecode.c.h; path = MMWindowController.h; sourceTree = "<group>"; };
 		1D1474BA0C567A910038FA2B /* MMWindowController.m */ = {isa = PBXFileReference; fileEncoding = 30; lastKnownFileType = sourcecode.c.objc; path = MMWindowController.m; sourceTree = "<group>"; };
 		1D22374A0E45DF4800E6FFFF /* Advanced.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Advanced.png; sourceTree = "<group>"; };
@@ -555,6 +561,10 @@
 				AABBC0010000000000000016 /* MMRemoteEndpoint.h */,
 				AABBC0010000000000000017 /* MMDORemoteEndpoint.h */,
 				AABBC0010000000000000018 /* MMDORemoteEndpoint.m */,
+				AABBC001000000000000000A0 /* MMSocketChannel.h */,
+				AABBC001000000000000000A1 /* MMSocketChannel.m */,
+				AABBC001000000000000000A3 /* MMSocketRemoteEndpoint.h */,
+				AABBC001000000000000000A4 /* MMSocketRemoteEndpoint.m */,
 				AABBC0010000000000000010 /* MMSelectionInfo.h */,
 				AABBC0010000000000000011 /* MMSelectionInfo.m */,
 				AABBC0010000000000000013 /* MMEvalResult.h */,
@@ -1247,6 +1257,8 @@
 				1D1474B00C5678370038FA2B /* MMTextView.m in Sources */,
 				1D1474B60C56796D0038FA2B /* MMVimController.m in Sources */,
 				AABBC0010000000000000019 /* MMDORemoteEndpoint.m in Sources */,
+				AABBC001000000000000000A2 /* MMSocketChannel.m in Sources */,
+				AABBC001000000000000000A5 /* MMSocketRemoteEndpoint.m in Sources */,
 				AABBC0010000000000000012 /* MMSelectionInfo.m in Sources */,
 				AABBC0010000000000000015 /* MMEvalResult.m in Sources */,
 				1D1474BC0C567A910038FA2B /* MMWindowController.m in Sources */,

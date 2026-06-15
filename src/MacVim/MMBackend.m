@@ -29,6 +29,8 @@
 
 #import "MMBackend.h"
 #import "MMDORemoteEndpoint.h"
+#import "MMSocketChannel.h"
+#import "MMSocketRemoteEndpoint.h"
 #import "MMEvalResult.h"
 #import "MMSelectionInfo.h"
 #include "gui_macvim.pro"
@@ -207,6 +209,13 @@ static struct specialkey
 - (void)serverConnectionDidDie:(NSNotification *)notification;
 - (void)addClient:(NSDistantObject *)client;
 - (NSString *)alternateServerNameForName:(NSString *)name;
+@end
+
+
+// Methods defined in the primary @implementation but called before their
+// definition (so they need a forward declaration).
+@interface MMBackend ()
+- (BOOL)setupSocketTransport;
 @end
 
 
@@ -436,6 +445,17 @@ static struct specialkey
     }
 
     @try {
+        int pid = [[NSProcessInfo processInfo] processIdentifier];
+
+        // The GUI is now running (it registers both the DO connection and, when
+        // MMUseSocket is on, the Unix-domain rendezvous socket).  Prefer the
+        // socket transport; fall back to DO on any failure.
+        if ([[NSUserDefaults standardUserDefaults] boolForKey:MMUseSocketKey]
+                && [self setupSocketTransport]) {
+            identifier = [appProxy connectBackend:self pid:pid];
+            return YES;
+        }
+
         remoteEndpoint = [[MMDORemoteEndpoint alloc] initWithConnection:connection];
 
         __block __unsafe_unretained MMBackend *weakSelf = self;
@@ -454,8 +474,6 @@ static struct specialkey
         // modal loop) then any calls to the frontend will block indefinitely
         // (the default timeouts are huge).
 
-        int pid = [[NSProcessInfo processInfo] processIdentifier];
-
         identifier = [appProxy connectBackend:self pid:pid];
         return YES;
     }
@@ -464,6 +482,38 @@ static struct specialkey
     }
 
     return NO;
+}
+
+// Establishes the runtime channel to the GUI over a Unix-domain socket.
+// Returns NO (leaving appProxy/remoteEndpoint unset) if the GUI is not
+// advertising the socket, so the caller can fall back to the DO transport.
+- (BOOL)setupSocketTransport
+{
+    MMSocketChannel *ch =
+        [MMSocketChannel channelByConnectingToPath:MMFrontendSocketPath()];
+    if (!ch)
+        return NO;
+
+    MMSocketRemoteEndpoint *ep =
+        [[MMSocketRemoteEndpoint alloc] initWithChannel:ch];
+
+    __block __unsafe_unretained MMBackend *weakSelf = self;
+    ep.incomingHandler = ^(uint32_t op, NSArray *args, void (^reply)(id)) {
+        // The MMBackendEndpoint methods touch Vim core state, which is only
+        // safe on the main (Vim) thread.  Vim services the main queue whenever
+        // it pumps its run loop.
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [MMSocketBackendProxy serveOpcode:op args:args
+                                       target:weakSelf reply:reply];
+        });
+    };
+    [ep addInvalidationHandler:^{
+        [weakSelf connectionDidDie:nil];
+    }];
+
+    remoteEndpoint = ep;                      // retained by alloc
+    appProxy = (id)[[ep appProxy] retain];
+    return YES;
 }
 
 - (BOOL)openGUIWindow

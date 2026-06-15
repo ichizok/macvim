@@ -1322,11 +1322,13 @@ HAIKUGUI_BUNDLE =
 # MACVIM GUI
 MACVIMGUI_SRC	= gui.c gui_beval.c MacVim/gui_macvim.m MacVim/MMBackend.m \
 		  MacVim/MacVim.m MacVim/MMSelectionInfo.m \
-		  MacVim/MMEvalResult.m MacVim/MMDORemoteEndpoint.m
+		  MacVim/MMEvalResult.m MacVim/MMDORemoteEndpoint.m \
+		  MacVim/MMSocketChannel.m MacVim/MMSocketRemoteEndpoint.m
 MACVIMGUI_OBJ	= objects/gui.o objects/gui_beval.o \
 		  objects/gui_macvim.o objects/MMBackend.o objects/MacVim.o \
 		  objects/MMSelectionInfo.o objects/MMEvalResult.o \
-		  objects/MMDORemoteEndpoint.o
+		  objects/MMDORemoteEndpoint.o \
+		  objects/MMSocketChannel.o objects/MMSocketRemoteEndpoint.o
 MACVIMGUI_DEFS	= -DFEAT_GUI_MACVIM -Wall -Wno-unknown-pragmas -pipe
 MACVIMGUI_IPATH	=
 MACVIMGUI_LIBS_DIR =
@@ -1345,7 +1347,8 @@ ALL_GUI_PRO  = proto/gui.pro proto/gui_gtk.pro proto/gui_gtk4.pro proto/gui_moti
 
 ALL_GUI_SRC  += MacVim/gui_macvim.m MacVim/MMBackend.m MacVim/MacVim.m \
 		MacVim/MMSelectionInfo.m MacVim/MMEvalResult.m \
-		MacVim/MMDORemoteEndpoint.m
+		MacVim/MMDORemoteEndpoint.m \
+		MacVim/MMSocketChannel.m MacVim/MMSocketRemoteEndpoint.m
 
 # }}}
 
@@ -3294,6 +3297,12 @@ objects/MMEvalResult.o: MacVim/MMEvalResult.m
 
 objects/MMDORemoteEndpoint.o: MacVim/MMDORemoteEndpoint.m
 	$(CCC) -o $@ MacVim/MMDORemoteEndpoint.m
+
+objects/MMSocketChannel.o: MacVim/MMSocketChannel.m
+	$(CCC) -o $@ MacVim/MMSocketChannel.m
+
+objects/MMSocketRemoteEndpoint.o: MacVim/MMSocketRemoteEndpoint.m
+	$(CCC) -o $@ MacVim/MMSocketRemoteEndpoint.m
 
 objects/alloc.o: alloc.c
 	$(CCC) -o $@ alloc.c
