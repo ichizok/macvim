@@ -877,8 +877,27 @@ fsEventCallback(ConstFSEventStreamRef streamRef,
         [vc uninitialize];
     }
 
+    // Drain pending socket writes (the TerminateNowMsgID sent to each Vim
+    // process just above is still an asynchronous write) before tearing the
+    // connections down: if a backend saw EOF ahead of that message it would
+    // treat this clean quit as a crash and preserve its swap files.
+    if (socketRegistrars) {
+        NSArray *regs;
+        @synchronized (socketRegistrars) {
+            regs = [[socketRegistrars copy] autorelease];
+        }
+        NSDate *flushDeadline = [NSDate dateWithTimeIntervalSinceNow:2];
+        for (MMSocketBackendRegistrar *reg in regs) {
+            NSTimeInterval left = [flushDeadline timeIntervalSinceNow];
+            if (left <= 0) break;
+            [[[reg endpoint] channel] flushWithTimeout:left];
+        }
+    }
+    [(MMSocketListener *)frontendSocketListener invalidate];
+
     // This will invalidate all connections (since they were spawned from this
-    // connection).
+    // connection).  Socket-attached backends observe EOF when the process
+    // exits and their writes above have been flushed.
     [connection invalidate];
 
     [NSApp setDelegate:nil];
@@ -894,9 +913,10 @@ fsEventCallback(ConstFSEventStreamRef streamRef,
         ASLogDebug(@"%d processes still left, hold on...", numChildProcesses);
 
         // Run in NSConnectionReplyMode while waiting instead of calling e.g.
-        // usleep().  Otherwise incoming messages may clog up the DO queues and
-        // the outgoing TerminateNowMsgID sent earlier never reaches the Vim
-        // process.
+        // usleep().  Otherwise incoming DO messages may clog up the DO queues
+        // and the outgoing TerminateNowMsgID sent earlier never reaches the
+        // Vim process.  (This only matters for the DO transport; socket
+        // writes were flushed explicitly above.)
         // This has at least one side-effect, namely we may receive the
         // annoying "dropping incoming DO message".  (E.g. this may happen if
         // you quickly hit Cmd-n several times in a row and then immediately
