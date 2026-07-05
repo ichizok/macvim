@@ -12,6 +12,8 @@
 
 #import <Cocoa/Cocoa.h>
 
+#import <sys/socket.h>
+
 #import "Miscellaneous.h"
 #import "MMAppController.h"
 #import "MMApplication.h"
@@ -22,6 +24,8 @@
 #import "MMWindowController.h"
 #import "MMVimController.h"
 #import "MMVimView.h"
+#import "MMSocketChannel.h"
+#import "MMSocketRemoteEndpoint.h"
 
 // Expose private methods for testing purposes
 @interface MMAppController (Private)
@@ -1574,6 +1578,133 @@ do { \
 
     [self sendStringToVim:@":set nomodified\n" withMods:0];
     [self waitForEventHandlingAndVimProcess];
+}
+
+#pragma mark Socket transport tests
+
+/// Create a connected pair of socket endpoints within this process, standing
+/// in for the GUI<->backend link.  Handlers must be assigned by the caller
+/// before calling -activate on each endpoint.
+- (void)createEndpointPair:(MMSocketRemoteEndpoint * __strong *)epA
+                          :(MMSocketRemoteEndpoint * __strong *)epB {
+    int fds[2] = { -1, -1 };
+    XCTAssertEqual(0, socketpair(AF_UNIX, SOCK_STREAM, 0, fds));
+    MMSocketChannel *chA = [[MMSocketChannel alloc] initWithFileDescriptor:fds[0]];
+    MMSocketChannel *chB = [[MMSocketChannel alloc] initWithFileDescriptor:fds[1]];
+    XCTAssertNotNil(chA);
+    XCTAssertNotNil(chB);
+    *epA = [[MMSocketRemoteEndpoint alloc] initWithChannel:chA];
+    *epB = [[MMSocketRemoteEndpoint alloc] initWithChannel:chB];
+    [*epA setReplyTimeout:5];
+    [*epB setReplyTimeout:5];
+}
+
+/// Regression test for the mutual synchronous-call deadlock: a main thread
+/// blocked in sendRequestOpcode: must serve inbound requests while it waits
+/// (the DO transport provided this via NSConnectionReplyMode reentrancy).
+/// This is the evaluateExpression -> serverlist() shape: A requests from B,
+/// B's handler issues a nested request back to A before replying.  Because
+/// both endpoints share the one main thread, this also verifies that the
+/// serving queue is process-global rather than per-endpoint.
+- (void)testSocketEndpointNestedSyncRequestsDoNotDeadlock {
+    MMSocketRemoteEndpoint *epA = nil, *epB = nil;
+    [self createEndpointPair:&epA :&epB];
+
+    MMSocketRemoteEndpoint *epBCaptured = epB;
+    __block BOOL sawMainThreadOnly = YES;
+    epB.incomingHandler = ^(uint32_t op, NSArray *args, void (^reply)(id)) {
+        if (!NSThread.isMainThread) sawMainThreadOnly = NO;
+        XCTAssertEqual(op, 1u);
+        // Nested synchronous request from within a served handler.
+        id nested = [epBCaptured sendRequestOpcode:2 args:@[]];
+        reply([NSString stringWithFormat:@"outer+%@", nested]);
+    };
+    epA.incomingHandler = ^(uint32_t op, NSArray *args, void (^reply)(id)) {
+        if (!NSThread.isMainThread) sawMainThreadOnly = NO;
+        XCTAssertEqual(op, 2u);
+        reply(@"inner");
+    };
+    [epA activate];
+    [epB activate];
+
+    // Deadlocks (and then times out, returning nil) without the pump.
+    id result = [epA sendRequestOpcode:1 args:@[]];
+    XCTAssertEqualObjects(result, @"outer+inner");
+    XCTAssertTrue(sawMainThreadOnly);
+}
+
+/// Inbound frames of one connection must be served in arrival order,
+/// including a synchronous request queued behind earlier one-way frames, and
+/// an off-main-thread caller must be able to wait for its reply.
+- (void)testSocketEndpointPreservesInboundOrder {
+    MMSocketRemoteEndpoint *epA = nil, *epB = nil;
+    [self createEndpointPair:&epA :&epB];
+
+    NSMutableArray<NSNumber *> *served = [NSMutableArray array];
+    epA.incomingHandler = ^(uint32_t op, NSArray *args, void (^reply)(id)) {
+        [served addObject:@(op)];
+        reply(@(op));
+    };
+    epB.incomingHandler = ^(uint32_t op, NSArray *args, void (^reply)(id)) {
+        reply(nil);
+    };
+    [epA activate];
+    [epB activate];
+
+    [epB sendOnewayOpcode:10 args:@[]];
+    [epB sendOnewayOpcode:11 args:@[]];
+
+    XCTestExpectation *replied = [self expectationWithDescription:@"reply"];
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        id r = [epB sendRequestOpcode:12 args:@[]];
+        XCTAssertEqualObjects(r, @12);
+        [replied fulfill];
+    });
+    [self waitForExpectations:@[replied] timeout:5];
+
+    XCTAssertEqualObjects(served, (@[ @10, @11, @12 ]));
+}
+
+/// Frames still queued for an endpoint when its connection dies must be
+/// purged without being served and without crashing, even when the endpoint
+/// is released while items are in flight.
+- (void)testSocketEndpointInvalidationPurgesQueuedFrames {
+    MMSocketRemoteEndpoint *epA = nil, *epB = nil;
+    [self createEndpointPair:&epA :&epB];
+
+    __block int servedCount = 0;
+    epA.incomingHandler = ^(uint32_t op, NSArray *args, void (^reply)(id)) {
+        ++servedCount;
+        reply(nil);
+    };
+    epB.incomingHandler = ^(uint32_t op, NSArray *args, void (^reply)(id)) {
+        reply(nil);
+    };
+    [epA activate];
+    [epB activate];
+
+    [epB sendOnewayOpcode:20 args:@[]];
+    // Drop B; its channel closes and A observes EOF, which purges any of A's
+    // queued-but-unserved items before A's invalidation handlers run.
+    epB = nil;
+
+    // Give the channel queues and the main run loop time to settle.
+    NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:2];
+    while ([epA isValid] && [deadline timeIntervalSinceNow] > 0)
+        [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode
+                                 beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.05]];
+    XCTAssertFalse([epA isValid]);
+
+    // A request against the invalidated endpoint returns nil immediately
+    // instead of hanging.
+    XCTAssertNil([epA sendRequestOpcode:21 args:@[]]);
+    epA = nil;
+
+    // One more spin so any deferred releases run; the assertion here is
+    // simply "no crash / no use-after-free".
+    [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode
+                             beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.1]];
+    XCTAssertLessThanOrEqual(servedCount, 1);
 }
 
 @end

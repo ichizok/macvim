@@ -499,17 +499,16 @@ static struct specialkey
 
     __block __unsafe_unretained MMBackend *weakSelf = self;
     ep.incomingHandler = ^(uint32_t op, NSArray *args, void (^reply)(id)) {
-        // The MMBackendEndpoint methods touch Vim core state, which is only
-        // safe on the main (Vim) thread.  Vim services the main queue whenever
-        // it pumps its run loop.
-        dispatch_async(dispatch_get_main_queue(), ^{
-            [MMSocketBackendProxy serveOpcode:op args:args
-                                       target:weakSelf reply:reply];
-        });
+        // Invoked on the main (Vim) thread by the endpoint — the
+        // MMBackendEndpoint methods touch Vim core state, which is only safe
+        // there.  Frames are delivered whenever Vim pumps its run loop.
+        [MMSocketBackendProxy serveOpcode:op args:args
+                                   target:weakSelf reply:reply];
     };
     [ep addInvalidationHandler:^{
         [weakSelf connectionDidDie:nil];
     }];
+    [ep activate];
 
     remoteEndpoint = ep;                      // retained by alloc
     appProxy = (id)[[ep appProxy] retain];
@@ -1856,7 +1855,17 @@ static struct specialkey
 {
     NSArray *list = nil;
 
-    if ([self connection] && [connection isValid]) {
+    if (appProxy && [remoteEndpoint isValid]) {
+        // Checked in: go through the established transport (socket or DO).
+        // Bypassing it for a fresh DO root proxy would sidestep the socket
+        // path and reintroduce the sync-call deadlock the pump prevents.
+        @try {
+            list = [appProxy serverList];
+        }
+        @catch (NSException *ex) {
+            ASLogDebug(@"serverList failed: reason=%@", ex);
+        }
+    } else if ([self connection] && [connection isValid]) {
         @try {
             id proxy = [connection rootProxy];
             [proxy setProtocolForProxy:@protocol(MMAppProtocol)];

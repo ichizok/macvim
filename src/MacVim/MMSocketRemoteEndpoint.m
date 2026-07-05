@@ -90,18 +90,100 @@ static NSArray *MMUnarchiveArgs(NSData *data)
     return [obj isKindOfClass:[NSArray class]] ? obj : nil;
 }
 
+// Build one envelope frame.  Pure function of its arguments so reply blocks
+// need not keep the endpoint alive.
+static NSData *MMEncodeEnvelope(uint8_t kind, uint32_t op, uint64_t corr,
+                                NSArray *args)
+{
+    NSData *a = MMArchiveArgs(args);
+    NSMutableData *m = [NSMutableData dataWithCapacity:13 + [a length]];
+    uint32_t beOp = OSSwapHostToBigInt32(op);
+    uint64_t beCorr = OSSwapHostToBigInt64(corr);
+    [m appendBytes:&kind length:1];
+    [m appendBytes:&beOp length:4];
+    [m appendBytes:&beCorr length:8];
+    [m appendData:a];
+    return m;
+}
+
 
 // One outstanding synchronous request awaiting its reply.
+// All fields are guarded by gPumpLock.
 @interface MMPendingReply : NSObject {
 @public
-    dispatch_semaphore_t sem;
-    id                   result;   // retained
+    id   result;   // retained
+    BOOL done;
 }
 @end
 @implementation MMPendingReply
-- (instancetype)init { if ((self = [super init])) sem = dispatch_semaphore_create(0); return self; }
-- (void)dealloc { if (sem) dispatch_release(sem); [result release]; [super dealloc]; }
+- (void)dealloc { [result release]; [super dealloc]; }
 @end
+
+
+// One inbound REQUEST/ONEWAY awaiting service on the main thread.
+@interface MMIncomingItem : NSObject {
+@public
+    MMSocketRemoteEndpoint *endpoint;    // retained
+    uint32_t               op;
+    NSArray                *args;        // retained
+    void                   (^reply)(id); // heap-copied
+}
+@end
+@implementation MMIncomingItem
+- (void)dealloc
+{
+    [endpoint release];
+    [args release];
+    [reply release];
+    [super dealloc];
+}
+@end
+
+
+// --- Process-global pump state ---------------------------------------------
+//
+// The incoming FIFO and its condition are shared by every socket endpoint in
+// the process.  This is deliberate: the GUI holds one endpoint per Vim child,
+// and a main thread blocked on endpoint A's reply must still be able to serve
+// a request arriving on endpoint B (DO's NSConnectionReplyMode serviced all
+// connections during a reply wait; a per-endpoint queue would let a
+// three-process cycle, e.g. eval -> remote_expr('VIM2') -> serverlist(),
+// deadlock).
+//
+// Inbound REQUEST/ONEWAY frames are appended to gIncoming and served, in FIFO
+// order and always on the main thread, from one of two places:
+//  - the run-loop source gDrainSource (installed in the common modes, and in
+//    any extra mode requested via addRequestRunLoopMode:), or
+//  - the pump loop inside sendRequestOpcode:, which serves queued items while
+//    it waits for its own reply.  This reproduces the DO reply-mode
+//    reentrancy the frontend and backend rely on: without it, two peers that
+//    issue synchronous calls at the same time deadlock (GUI evaluateExpression
+//    vs. backend serverList).
+//
+// A run-loop source is used instead of dispatch_async onto the main queue:
+// the main GCD queue is not drained by run loops nested inside a main-queue
+// callback, nor in non-common modes such as NSEventTrackingRunLoopMode.
+
+static NSCondition       *gPumpLock;
+static NSMutableArray    *gIncoming;      // MMIncomingItem FIFO
+static CFRunLoopSourceRef gDrainSource;
+
+static void MMDrainIncomingSourcePerform(void *info);
+
+static void MMPumpInit(void)
+{
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        gPumpLock = [[NSCondition alloc] init];
+        gIncoming = [[NSMutableArray alloc] init];
+        CFRunLoopSourceContext ctx;
+        memset(&ctx, 0, sizeof(ctx));
+        ctx.perform = MMDrainIncomingSourcePerform;
+        gDrainSource = CFRunLoopSourceCreate(NULL, 0, &ctx);
+        CFRunLoopAddSource(CFRunLoopGetMain(), gDrainSource,
+                           kCFRunLoopCommonModes);
+    });
+}
 
 
 @implementation MMSocketRemoteEndpoint {
@@ -110,22 +192,24 @@ static NSArray *MMUnarchiveArgs(NSData *data)
     NSMutableDictionary *_pending;       // @(corrId) -> MMPendingReply
     uint64_t             _corrCounter;
     NSTimeInterval       _requestTimeout;
-    BOOL                 _invalidated;
+    NSTimeInterval       _replyTimeout;
+    BOOL                 _invalidated;   // guarded by gPumpLock
 }
 
 - (instancetype)initWithChannel:(MMSocketChannel *)channel
 {
     if (!(self = [super init])) return nil;
     if (!channel) { [self release]; return nil; }
+    MMPumpInit();
     _channel = [channel retain];
     _invalidationHandlers = [[NSMutableArray alloc] init];
     _pending = [[NSMutableDictionary alloc] init];
     _requestTimeout = -1;
+    _replyTimeout = -1;
 
     __block __unsafe_unretained MMSocketRemoteEndpoint *weakSelf = self;
     _channel.frameHandler = ^(NSData *payload) { [weakSelf handleFrame:payload]; };
     _channel.invalidationHandler = ^{ [weakSelf handleChannelInvalidated]; };
-    [_channel resume];
     return self;
 }
 
@@ -140,23 +224,16 @@ static NSArray *MMUnarchiveArgs(NSData *data)
 
 - (MMSocketChannel *)channel { return _channel; }
 
-#pragma mark - Envelope encode/decode
-
-- (NSData *)encodeKind:(uint8_t)kind opcode:(uint32_t)op
-            correlation:(uint64_t)corr args:(NSArray *)args
+- (void)activate
 {
-    NSData *a = MMArchiveArgs(args);
-    NSMutableData *m = [NSMutableData dataWithCapacity:13 + [a length]];
-    uint32_t beOp = OSSwapHostToBigInt32(op);
-    uint64_t beCorr = OSSwapHostToBigInt64(corr);
-    [m appendBytes:&kind length:1];
-    [m appendBytes:&beOp length:4];
-    [m appendBytes:&beCorr length:8];
-    [m appendData:a];
-    return m;
+    // The caller must have set incomingHandler (and any invalidation
+    // handlers) by now; frames may arrive as soon as the channel resumes,
+    // and the peer's first frame can be a REQUEST (registration).
+    [_channel resume];
 }
 
-// Runs on the channel's private queue.
+#pragma mark - Frame handling (channel queue)
+
 - (void)handleFrame:(NSData *)payload
 {
     if ([payload length] < 13) {
@@ -173,57 +250,133 @@ static NSArray *MMUnarchiveArgs(NSData *data)
     if (!args) args = @[];
 
     if (kind == MMFrameReply) {
-        MMPendingReply *pr = nil;
-        @synchronized (_pending) {
-            pr = [[[_pending objectForKey:@(corr)] retain] autorelease];
-            [_pending removeObjectForKey:@(corr)];
-        }
+        // Replies are consumed immediately, never queued behind unserved
+        // requests, so a blocked caller wakes as soon as its answer arrives.
+        [gPumpLock lock];
+        MMPendingReply *pr = [_pending objectForKey:@(corr)];
         if (pr) {
             pr->result = [(args.count ? args[0] : [NSNull null]) retain];
-            dispatch_semaphore_signal(pr->sem);
+            pr->done = YES;
+            [gPumpLock broadcast];
         }
+        [gPumpLock unlock];
         return;
     }
 
-    // REQUEST or ONEWAY: hand to the local target.
-    void (^incoming)(uint32_t, NSArray *, void (^)(id)) = self.incomingHandler;
-    if (!incoming) return;
-
+    // REQUEST or ONEWAY: queue for service on the main thread.
+    MMIncomingItem *item = [[MMIncomingItem alloc] init];
+    item->endpoint = [self retain];
+    item->op = op;
+    item->args = [args retain];
     if (kind == MMFrameRequest) {
-        __block __unsafe_unretained MMSocketRemoteEndpoint *weakSelf = self;
-        void (^reply)(id) = ^(id result) {
-            [weakSelf->_channel sendFrame:
-                [weakSelf encodeKind:MMFrameReply opcode:op correlation:corr
-                                args:@[ MMBox(result) ]]];
-        };
-        incoming(op, args, reply);
+        // The reply block captures the channel (retained by the block copy),
+        // not the endpoint: items can outlive the endpoint's owner, and the
+        // channel no-ops sends after invalidation.
+        MMSocketChannel *chan = _channel;
+        item->reply = [^(id result) {
+            [chan sendFrame:MMEncodeEnvelope(MMFrameReply, op, corr,
+                                             @[ MMBox(result) ])];
+        } copy];
     } else {
-        incoming(op, args, ^(id result) { (void)result; });
+        item->reply = [^(id result) { (void)result; } copy];
     }
+
+    [gPumpLock lock];
+    if (_invalidated) {
+        [gPumpLock unlock];
+        [item release];
+        return;
+    }
+    [gIncoming addObject:item];
+    [gPumpLock broadcast];   // wake a pumping sendRequestOpcode:
+    [gPumpLock unlock];
+    [item release];          // gIncoming holds it now
+
+    CFRunLoopSourceSignal(gDrainSource);
+    CFRunLoopWakeUp(CFRunLoopGetMain());
 }
 
 - (void)handleChannelInvalidated
 {
+    NSMutableArray *dropped = [NSMutableArray array];
+
+    [gPumpLock lock];
+    if (_invalidated) {
+        [gPumpLock unlock];
+        return;
+    }
+    _invalidated = YES;
+    // Purge our queued-but-unserved items *before* firing the invalidation
+    // handlers below: the GUI's handler schedules the release of the object
+    // that our queued serve targets point at.  Collect the items and release
+    // them outside the lock — dropping the last reference to an endpoint
+    // while holding gPumpLock could recurse into channel teardown.
+    for (NSUInteger i = [gIncoming count]; i > 0; --i) {
+        MMIncomingItem *it = [gIncoming objectAtIndex:i-1];
+        if (it->endpoint == self) {
+            [dropped addObject:it];
+            [gIncoming removeObjectAtIndex:i-1];
+        }
+    }
+    // Wake blocked synchronous callers; they observe _invalidated and return
+    // nil instead of hanging forever.
+    [gPumpLock broadcast];
+    [gPumpLock unlock];
+    [dropped removeAllObjects];
+
     NSArray *handlers;
-    NSArray *pendings;
     @synchronized (_invalidationHandlers) {
-        if (_invalidated) return;
-        _invalidated = YES;
         handlers = [[_invalidationHandlers copy] autorelease];
         [_invalidationHandlers removeAllObjects];
     }
-    // Wake any blocked synchronous callers so they return (with nil) instead
-    // of hanging forever.
-    @synchronized (_pending) {
-        pendings = [[_pending allValues] copy];
-        [_pending removeAllObjects];
-    }
-    for (MMPendingReply *pr in pendings)
-        dispatch_semaphore_signal(pr->sem);
-    [pendings release];
-
     for (void (^h)(void) in handlers)
         h();
+}
+
+#pragma mark - Serving (main thread)
+
+// Pop the head of the shared FIFO.  Returns a +1 reference, or nil when
+// empty.  gPumpLock must be held.
++ (MMIncomingItem *)popIncomingLocked
+{
+    if ([gIncoming count] == 0) return nil;
+    MMIncomingItem *item = [[gIncoming objectAtIndex:0] retain];
+    [gIncoming removeObjectAtIndex:0];
+    return item;
+}
+
+// Serve one inbound frame.  Main thread only; gPumpLock must NOT be held.
++ (void)serveItem:(MMIncomingItem *)item
+{
+    void (^handler)(uint32_t, NSArray *, void (^)(id)) =
+            item->endpoint.incomingHandler;
+    if (!handler) {
+        // Should not happen post-activate; reply nil so a REQUEST peer is
+        // not stranded.
+        item->reply(nil);
+        return;
+    }
+    // A handler exception must not unwind through the pump loop and strand
+    // the waiter above it.
+    @try {
+        handler(item->op, item->args, item->reply);
+    }
+    @catch (NSException *ex) {
+        ASLogErr(@"Exception serving IPC op=%u: %@", item->op, ex);
+    }
+}
+
+static void MMDrainIncomingSourcePerform(void *info)
+{
+    (void)info;
+    for (;;) {
+        [gPumpLock lock];
+        MMIncomingItem *item = [MMSocketRemoteEndpoint popIncomingLocked];
+        [gPumpLock unlock];
+        if (!item) break;
+        [MMSocketRemoteEndpoint serveItem:item];
+        [item release];
+    }
 }
 
 #pragma mark - Sending
@@ -231,34 +384,70 @@ static NSArray *MMUnarchiveArgs(NSData *data)
 - (void)sendOnewayOpcode:(uint32_t)opcode args:(NSArray *)args
 {
     if (_invalidated) return;
-    [_channel sendFrame:[self encodeKind:MMFrameOneway opcode:opcode
-                             correlation:0 args:args]];
+    [_channel sendFrame:MMEncodeEnvelope(MMFrameOneway, opcode, 0, args)];
 }
 
 - (id)sendRequestOpcode:(uint32_t)opcode args:(NSArray *)args
 {
-    if (_invalidated) return nil;
+    // Replies are delivered on the channel queue; waiting for one there can
+    // never succeed.
+    NSAssert(![_channel isOnPrivateQueue],
+             @"synchronous IPC request on the channel queue");
 
+    MMPendingReply *pr = [[MMPendingReply alloc] init];
     uint64_t corr;
-    @synchronized (self) { corr = ++_corrCounter; }
 
-    MMPendingReply *pr = [[[MMPendingReply alloc] init] autorelease];
-    @synchronized (_pending) { [_pending setObject:pr forKey:@(corr)]; }
-
-    [_channel sendFrame:[self encodeKind:MMFrameRequest opcode:opcode
-                             correlation:corr args:args]];
-
-    dispatch_time_t deadline = (_requestTimeout < 0)
-        ? DISPATCH_TIME_FOREVER
-        : dispatch_time(DISPATCH_TIME_NOW, (int64_t)(_requestTimeout * NSEC_PER_SEC));
-    long timedOut = dispatch_semaphore_wait(pr->sem, deadline);
-
-    @synchronized (_pending) { [_pending removeObjectForKey:@(corr)]; }
-    if (timedOut != 0) {
-        ASLogErr(@"IPC request op=%u timed out", opcode);
+    [gPumpLock lock];
+    if (_invalidated) {
+        [gPumpLock unlock];
+        [pr release];
         return nil;
     }
-    return MMUnbox(pr->result);
+    corr = ++_corrCounter;
+    [_pending setObject:pr forKey:@(corr)];
+    [gPumpLock unlock];
+
+    [_channel sendFrame:MMEncodeEnvelope(MMFrameRequest, opcode, corr, args)];
+
+    NSDate *deadline = (_replyTimeout <= 0)
+        ? [NSDate distantFuture]
+        : [NSDate dateWithTimeIntervalSinceNow:_replyTimeout];
+    // Only the main thread may serve handlers (they touch AppKit / Vim core
+    // state); other callers just wait and rely on the run-loop source.
+    BOOL pump = [NSThread isMainThread];
+    BOOL timedOut = NO;
+
+    [gPumpLock lock];
+    for (;;) {
+        if (pr->done || _invalidated)
+            break;
+        if (pump) {
+            MMIncomingItem *item = [MMSocketRemoteEndpoint popIncomingLocked];
+            if (item) {
+                [gPumpLock unlock];
+                [MMSocketRemoteEndpoint serveItem:item];
+                [item release];
+                [gPumpLock lock];
+                continue;   // re-check the reply before waiting
+            }
+        }
+        if ([deadline timeIntervalSinceNow] <= 0) {
+            timedOut = YES;
+            break;
+        }
+        // Bounded slices are defensive only; every state change (reply,
+        // enqueue, invalidation) broadcasts under this lock.
+        NSDate *slice = [NSDate dateWithTimeIntervalSinceNow:0.25];
+        [gPumpLock waitUntilDate:[deadline earlierDate:slice]];
+    }
+    id result = pr->done ? [[pr->result retain] autorelease] : nil;
+    [_pending removeObjectForKey:@(corr)];
+    [gPumpLock unlock];
+    [pr release];
+
+    if (timedOut)
+        ASLogErr(@"IPC request op=%u timed out", opcode);
+    return MMUnbox(result);
 }
 
 #pragma mark - Proxies
@@ -275,11 +464,21 @@ static NSArray *MMUnarchiveArgs(NSData *data)
 
 #pragma mark - MMRemoteEndpoint
 
-- (BOOL)isValid { return !_invalidated && [_channel isValid]; }
+- (BOOL)isValid
+{
+    // Unsynchronized read; validity is inherently racy against a peer that
+    // is dying concurrently, and callers already treat it as advisory.
+    return !_invalidated && [_channel isValid];
+}
 
+// NOTE on timeouts: on NSConnection, requestTimeout bounds *sending* a
+// request and replyTimeout bounds waiting for the answer.  Socket sends are
+// asynchronous and cannot block, so requestTimeout is stored only for
+// protocol compatibility; replyTimeout (<= 0 means forever, matching the DO
+// defaults) bounds the reply wait in sendRequestOpcode:.
 - (NSTimeInterval)requestTimeout { return _requestTimeout; }
 - (void)setRequestTimeout:(NSTimeInterval)seconds { _requestTimeout = seconds; }
-- (void)setReplyTimeout:(NSTimeInterval)seconds { (void)seconds; }
+- (void)setReplyTimeout:(NSTimeInterval)seconds { _replyTimeout = seconds; }
 
 - (id)addInvalidationHandler:(void (^)(void))handler
 {
@@ -296,8 +495,23 @@ static NSArray *MMUnarchiveArgs(NSData *data)
     @synchronized (_invalidationHandlers) { [_invalidationHandlers removeObjectIdenticalTo:token]; }
 }
 
-- (void)addRequestRunLoopMode:(NSString *)mode { (void)mode; }    // no-op for sockets
-- (void)removeRequestRunLoopMode:(NSString *)mode { (void)mode; } // no-op for sockets
+// The drain source lives in the common modes; these add/remove it in extra
+// modes (e.g. NSEventTrackingRunLoopMode during live resize) so inbound
+// frames keep flowing there, mirroring NSConnection's addRequestMode:.  The
+// source is process-global, so the mode set is shared by all endpoints; in
+// practice only one window is in live resize at a time.
+- (void)addRequestRunLoopMode:(NSString *)mode
+{
+    if (mode)
+        CFRunLoopAddSource(CFRunLoopGetMain(), gDrainSource, (CFStringRef)mode);
+}
+
+- (void)removeRequestRunLoopMode:(NSString *)mode
+{
+    if (mode && ![mode isEqualToString:(NSString *)kCFRunLoopCommonModes])
+        CFRunLoopRemoveSource(CFRunLoopGetMain(), gDrainSource,
+                              (CFStringRef)mode);
+}
 
 @end
 

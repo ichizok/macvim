@@ -14,13 +14,21 @@
 //
 // Each frame is an envelope: [kind][opcode][correlationId][archived args].
 // One-way methods map to ONEWAY frames; synchronous methods map to a REQUEST
-// frame whose REPLY (matched by correlationId) is awaited on a semaphore.
-// Replies arrive on the channel's private queue, never the caller's thread, so
-// a main-thread caller does not deadlock.
+// frame whose REPLY (matched by correlationId) is awaited by the caller.
 //
-// `incomingHandler` is invoked for inbound REQUEST/ONEWAY frames; integration
-// code (MMAppController, MMBackend) wires it to the local target via
-// +[MMSocketBackendProxy serveOpcode:...] / +[MMSocketAppProxy serveOpcode:...].
+// Inbound REQUEST/ONEWAY frames are queued on a process-global FIFO and served
+// on the MAIN thread, either by a run-loop source (installed in the common
+// modes) or — while a synchronous call is blocked waiting for its reply — by
+// that caller itself, which pumps the FIFO.  The pump reproduces the
+// reentrancy NSConnection provided in NSConnectionReplyMode: two peers that
+// issue synchronous calls at the same time each serve the other instead of
+// deadlocking.
+//
+// `incomingHandler` is invoked on the main thread for each inbound
+// REQUEST/ONEWAY; integration code (MMAppController, MMBackend) wires it to
+// the local target via +[MMSocketBackendProxy serveOpcode:...] /
+// +[MMSocketAppProxy serveOpcode:...].  Set the handlers, then call -activate
+// to start the flow of frames.
 //
 
 #import <Foundation/Foundation.h>
@@ -37,12 +45,18 @@ NS_ASSUME_NONNULL_BEGIN
 
 @property (nonatomic, readonly) MMSocketChannel *channel;
 
-/// Invoked on the channel's private queue for each inbound REQUEST/ONEWAY.
-/// For a REQUEST, call `reply(result)` exactly once (result nil -> NSNull).
-/// For a ONEWAY, `reply` is a no-op.
+/// Invoked on the MAIN thread for each inbound REQUEST/ONEWAY.  For a
+/// REQUEST, call `reply(result)` exactly once (result nil -> NSNull).  For a
+/// ONEWAY, `reply` is a no-op.  Must be set before -activate and not changed
+/// afterwards.
 @property (nonatomic, copy, nullable)
         void (^incomingHandler)(uint32_t opcode, NSArray *args,
                                 void (^reply)(id _Nullable result));
+
+/// Start delivering frames.  Call once, after incomingHandler and any
+/// invalidation handlers are in place; the peer's first frame may arrive
+/// immediately (e.g. the backend's registration REQUEST).
+- (void)activate;
 
 /// Proxy the GUI uses to call the Vim backend (return-value surface).
 - (id<MMBackendEndpoint>)backendProxy;
@@ -56,7 +70,9 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)sendOnewayOpcode:(uint32_t)opcode args:(nullable NSArray *)args;
 
 /// Send a REQUEST and block the calling thread until the REPLY arrives or the
-/// request times out (per -requestTimeout).  Returns the reply value (or nil).
+/// wait times out (per -setReplyTimeout:; <= 0 waits forever).  A main-thread
+/// caller serves queued inbound requests while it waits.  Returns the reply
+/// value (or nil).
 - (nullable id)sendRequestOpcode:(uint32_t)opcode
                             args:(nullable NSArray *)args;
 

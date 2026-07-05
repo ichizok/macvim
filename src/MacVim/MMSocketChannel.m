@@ -22,6 +22,10 @@
 // amounts of memory.  256 MB is far above any legitimate MacVim IPC payload.
 static const uint32_t MMSocketMaxFrameLength = 256u * 1024u * 1024u;
 
+// Queue-specific key used to detect when code runs on a channel's private
+// queue (the stored value distinguishes between channels).
+static void *MMSocketChannelQueueKey = &MMSocketChannelQueueKey;
+
 NSString *MMFrontendSocketPath(void)
 {
     // Per-user temp dir, identical across processes regardless of $TMPDIR.
@@ -63,6 +67,7 @@ NSString *MMFrontendSocketPath(void)
     _fd = fd;
     _readBuffer = [[NSMutableData alloc] init];
     _queue = dispatch_queue_create("org.vim.MacVim.socketchannel", DISPATCH_QUEUE_SERIAL);
+    dispatch_queue_set_specific(_queue, MMSocketChannelQueueKey, _queue, NULL);
     _writeGroup = dispatch_group_create();
 
     __block int capturedFd = _fd;
@@ -239,9 +244,22 @@ NSString *MMFrontendSocketPath(void)
     if (h) h();
 }
 
+- (BOOL)isOnPrivateQueue
+{
+    return dispatch_get_specific(MMSocketChannelQueueKey) == (void *)_queue;
+}
+
 - (void)invalidate
 {
     if (_invalidated) return;
+    if ([self isOnPrivateQueue]) {
+        // Already serialized with the read/frame handlers; a dispatch_sync
+        // onto our own queue would deadlock (e.g. when the last reference to
+        // our owner is dropped from a block running on this queue).
+        _invalidated = YES;
+        if (_io) dispatch_io_close(_io, DISPATCH_IO_STOP);
+        return;
+    }
     // Serialize teardown with the read/frame handlers.
     dispatch_sync(_queue, ^{
         if (_invalidated) return;

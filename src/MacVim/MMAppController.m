@@ -1722,16 +1722,17 @@ fsEventCallback(ConstFSEventStreamRef streamRef,
         }
         __block __unsafe_unretained MMSocketBackendRegistrar *weakReg = reg;
         ep.incomingHandler = ^(uint32_t op, NSArray *args, void (^reply)(id)) {
-            // Serve on the main thread: these touch the vim controllers list
-            // and AppKit state.
-            dispatch_async(dispatch_get_main_queue(), ^{
-                [MMSocketAppProxy serveOpcode:op args:args
-                                       target:weakReg reply:reply];
-            });
+            // Invoked on the main thread by the endpoint (these touch the
+            // vim controllers list and AppKit state).  The endpoint purges
+            // queued frames before the invalidation handler below runs, so
+            // the unretained registrar cannot be stale here.
+            [MMSocketAppProxy serveOpcode:op args:args
+                                   target:weakReg reply:reply];
         };
         [ep addInvalidationHandler:^{
             [weakSelf removeSocketRegistrar:weakReg];
         }];
+        [ep activate];
     };
     [listener resume];
     frontendSocketListener = [listener retain];

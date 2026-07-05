@@ -64,6 +64,11 @@ extern NSString *MMFrontendSocketPath(void);
 /// Tear down: cancel sources, close the fd, fire no further handlers.
 - (void)invalidate;
 
+/// YES when the caller is running on the channel's private queue.  Used to
+/// assert that a synchronous request wait never happens there (it would
+/// self-deadlock, since replies are delivered on that queue).
+- (BOOL)isOnPrivateQueue;
+
 @property (nonatomic, readonly, getter=isValid) BOOL valid;
 
 @end
