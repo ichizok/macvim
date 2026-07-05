@@ -301,8 +301,24 @@ NSString *MMFrontendSocketPath(void)
     addr.sun_family = AF_UNIX;
     strlcpy(addr.sun_path, cpath, sizeof(addr.sun_path));
 
-    // Remove a stale socket file from a previous (crashed) run.
+    // A socket file may already exist: either a stale leftover from a
+    // crashed run (safe to remove) or a *live* rendezvous owned by another
+    // running instance (must not be stolen — this runs before the DO
+    // singleton check).  Probe with a connect: refused/invalid means stale.
+    if (connect(fd, (struct sockaddr *)&addr, (socklen_t)SUN_LEN(&addr)) == 0) {
+        ASLogNotice(@"Another instance is listening at %@", path);
+        close(fd);
+        return nil;
+    }
+    // Remove the stale socket file, then recreate the probe socket (connect
+    // failure leaves the fd in an unusable state).
     unlink(cpath);
+    close(fd);
+    fd = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (fd < 0) {
+        ASLogErr(@"socket() failed: %s", strerror(errno));
+        return nil;
+    }
 
     if (bind(fd, (struct sockaddr *)&addr, (socklen_t)SUN_LEN(&addr)) != 0) {
         ASLogErr(@"bind(%@) failed: %s", path, strerror(errno));

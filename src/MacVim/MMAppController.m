@@ -364,6 +364,15 @@ fsEventCallback(ConstFSEventStreamRef streamRef,
     pidArguments = [NSMutableDictionary new];
     inputQueues = [NSMutableDictionary new];
 
+    // Optionally publish the Unix-domain-socket rendezvous so Vim children
+    // that read MMUseSocketKey can use it instead of the deprecated DO path.
+    // The listener must exist *before* the DO name below is registered: a
+    // backend that observes the DO name assumes the socket is also up, and
+    // registering in the opposite order would make it silently fall back to
+    // DO.  The DO connection stays registered as a fallback.
+    if ([[NSUserDefaults standardUserDefaults] boolForKey:MMUseSocketKey])
+        [self setupFrontendSocketListener];
+
     // NOTE: Do not use the default connection since the Logitech Control
     // Center (LCC) input manager steals and this would cause MacVim to
     // never open any windows.  (This is a bug in LCC but since they are
@@ -384,6 +393,11 @@ fsEventCallback(ConstFSEventStreamRef streamRef,
         ASLogCrit(@"Failed to register connection with name '%@'", name);
         [connection release];  connection = nil;
 
+        // Another instance owns the DO name; give up the socket rendezvous
+        // we just claimed (its socket file was stale) before terminating.
+        [(MMSocketListener *)frontendSocketListener invalidate];
+        [frontendSocketListener release];  frontendSocketListener = nil;
+
         NSAlert *alert = [[NSAlert alloc] init];
         [alert addButtonWithTitle:NSLocalizedString(@"OK",
             @"Dialog button")];
@@ -398,12 +412,6 @@ fsEventCallback(ConstFSEventStreamRef streamRef,
 
         [[NSApplication sharedApplication] terminate:nil];
     }
-
-    // Optionally publish the Unix-domain-socket rendezvous so Vim children
-    // that read MMUseSocketKey can use it instead of the deprecated DO path.
-    // The DO connection above stays registered as a fallback.
-    if ([[NSUserDefaults standardUserDefaults] boolForKey:MMUseSocketKey])
-        [self setupFrontendSocketListener];
 
     // Register help search handler to support search Vim docs via the Help menu
     [NSApp registerUserInterfaceItemSearchHandler:self];

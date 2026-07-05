@@ -378,7 +378,17 @@ static struct specialkey
 
 - (BOOL)checkin
 {
-    if (![self connection]) {
+    BOOL useSocket = [[NSUserDefaults standardUserDefaults]
+            boolForKey:MMUseSocketKey];
+
+    // When MMUseSocket is on, the socket rendezvous is tried first at every
+    // stage: the GUI binds it *before* registering the DO name, so a running
+    // GUI is reachable here without ever touching the deprecated DO
+    // machinery.  DO remains the fallback (the GUI may be running with the
+    // flag off, or an older version).
+    BOOL socketConnected = useSocket && [self setupSocketTransport];
+
+    if (!socketConnected && ![self connection]) {
         if (waitForAck) {
             // This is a preloaded process and as such should not cause the
             // MacVim to be opened.  We probably got here as a result of the
@@ -426,19 +436,24 @@ static struct specialkey
             [task launch];
         }
 
-        // HACK!  Poll the mach bootstrap server until it returns a valid
-        // connection to detect that MacVim has finished launching.  Also set a
+        // HACK!  Poll until the GUI has finished launching: prefer its socket
+        // rendezvous, fall back to the mach bootstrap (DO) name.  Also set a
         // time-out date so that we don't get stuck doing this forever.
         NSDate *timeOutDate = [NSDate dateWithTimeIntervalSinceNow:10];
-        while (![self connection] &&
-                NSOrderedDescending == [timeOutDate compare:[NSDate date]]) {
+        while (NSOrderedDescending == [timeOutDate compare:[NSDate date]]) {
+            if (useSocket && [self setupSocketTransport]) {
+                socketConnected = YES;
+                break;
+            }
+            // NOTE: [self connection] will set 'connection' as a side-effect.
+            if ([self connection])
+                break;
             [[NSRunLoop currentRunLoop]
                     runMode:NSDefaultRunLoopMode
                  beforeDate:[NSDate dateWithTimeIntervalSinceNow:.1]];
         }
 
-        // NOTE: [self connection] will set 'connection' as a side-effect.
-        if (!connection) {
+        if (!socketConnected && !connection) {
             ASLogCrit(@"Timed-out waiting for GUI to launch.");
             return NO;
         }
@@ -447,11 +462,9 @@ static struct specialkey
     @try {
         int pid = [[NSProcessInfo processInfo] processIdentifier];
 
-        // The GUI is now running (it registers both the DO connection and, when
-        // MMUseSocket is on, the Unix-domain rendezvous socket).  Prefer the
-        // socket transport; fall back to DO on any failure.
-        if ([[NSUserDefaults standardUserDefaults] boolForKey:MMUseSocketKey]
-                && [self setupSocketTransport]) {
+        if (socketConnected) {
+            // setupSocketTransport has set remoteEndpoint/appProxy; no
+            // NSConnection is created on this path.
             identifier = [appProxy connectBackend:self pid:pid];
             return YES;
         }
@@ -713,7 +726,7 @@ static struct specialkey
         }
         @catch (NSException *ex) {
             ASLogDebug(@"processInput:forIdentifer failed: reason=%@", ex);
-            if (![connection isValid]) {
+            if (![remoteEndpoint isValid]) {
                 ASLogDebug(@"Connection is invalid, exit now!");
                 ASLogDebug(@"waitForAck=%d got_int=%d", waitForAck, got_int);
                 mch_exit(-1);
@@ -789,7 +802,7 @@ static struct specialkey
     // The 'isTerminating' flag indicates that the frontend is also exiting so
     // there is no need to flush any more output since the frontend won't look
     // at it anyway.
-    if (!isTerminating && [connection isValid]) {
+    if (!isTerminating && [remoteEndpoint isValid]) {
         @try {
             // Flush the entire queue in case a VimLeave autocommand added
             // something to the queue.
@@ -1970,11 +1983,11 @@ static struct specialkey
 {
     if (!waitForAck) return;
 
-    while (waitForAck && !got_int && [connection isValid]) {
+    while (waitForAck && !got_int && [remoteEndpoint isValid]) {
         [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode
                                  beforeDate:[NSDate distantFuture]];
         ASLogDebug(@"  waitForAck=%d got_int=%d isValid=%d",
-                   waitForAck, got_int, [connection isValid]);
+                   waitForAck, got_int, [remoteEndpoint isValid]);
     }
 
     if (waitForAck) {
@@ -2087,7 +2100,7 @@ static struct specialkey
     // items while a sheet is being displayed, so we can't just wait for the
     // first message to arrive and assume that is the setDialogReturn: call.
 
-    while (nil == dialogReturn && !got_int && [connection isValid])
+    while (nil == dialogReturn && !got_int && [remoteEndpoint isValid])
         [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode
                                  beforeDate:[NSDate distantFuture]];
 
