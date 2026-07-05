@@ -47,6 +47,7 @@ NSString *MMFrontendSocketPath(void)
     int                _fd;
     dispatch_queue_t   _queue;        // serial: delivery + framing
     dispatch_io_t      _io;
+    dispatch_group_t   _writeGroup;   // tracks writes not yet on the wire
     NSMutableData     *_readBuffer;
     BOOL               _invalidated;
     BOOL               _resumed;
@@ -62,6 +63,7 @@ NSString *MMFrontendSocketPath(void)
     _fd = fd;
     _readBuffer = [[NSMutableData alloc] init];
     _queue = dispatch_queue_create("org.vim.MacVim.socketchannel", DISPATCH_QUEUE_SERIAL);
+    _writeGroup = dispatch_group_create();
 
     __block int capturedFd = _fd;
     _io = dispatch_io_create(DISPATCH_IO_STREAM, _fd, _queue, ^(int error) {
@@ -113,6 +115,7 @@ NSString *MMFrontendSocketPath(void)
     [self invalidate];
     if (_io) dispatch_release(_io);
     if (_queue) dispatch_release(_queue);
+    if (_writeGroup) dispatch_release(_writeGroup);
     [_readBuffer release];
     [super dealloc];
 }
@@ -127,7 +130,11 @@ NSString *MMFrontendSocketPath(void)
     if (_resumed || _invalidated) return;
     _resumed = YES;
 
-    __block __unsafe_unretained MMSocketChannel *weakSelf = self;
+    // NOTE: Capture self strongly (block copy retains under MRC).  The final
+    // read callback (done=true, on close/EOF) can be scheduled after the owner
+    // released us; an unretained self would then dereference a freed
+    // _readBuffer.  The retain lasts only until that final callback runs and
+    // the block is destroyed; owners break it by calling -invalidate.
     dispatch_io_read(_io, 0, SIZE_MAX, _queue,
         ^(bool done, dispatch_data_t data, int error) {
             if (data && dispatch_data_get_size(data) > 0) {
@@ -135,14 +142,14 @@ NSString *MMFrontendSocketPath(void)
                     ^bool(dispatch_data_t region, size_t offset,
                           const void *buffer, size_t size) {
                         (void)region; (void)offset;
-                        [weakSelf->_readBuffer appendBytes:buffer length:size];
+                        [self->_readBuffer appendBytes:buffer length:size];
                         return true;
                     });
-                [weakSelf drainReadBuffer];
+                [self drainReadBuffer];
             }
             if (error || done) {
                 // EOF (done with no error) or hard error: peer is gone.
-                [weakSelf handleDisconnect];
+                [self handleDisconnect];
             }
         });
 }
@@ -198,13 +205,28 @@ NSString *MMFrontendSocketPath(void)
             _queue, DISPATCH_DATA_DESTRUCTOR_DEFAULT);
     [frame release];
 
+    dispatch_group_enter(_writeGroup);
+    dispatch_group_t writeGroup = _writeGroup;
     dispatch_io_write(_io, 0, ddata, _queue,
         ^(bool done, dispatch_data_t remaining, int error) {
-            (void)done; (void)remaining;
+            (void)remaining;
             if (error)
                 ASLogDebug(@"socket write error: %s", strerror(error));
+            // The handler fires multiple times with partial progress; the
+            // final invocation (done, whether success or error) balances the
+            // enter above.
+            if (done)
+                dispatch_group_leave(writeGroup);
         });
     dispatch_release(ddata);
+}
+
+- (BOOL)flushWithTimeout:(NSTimeInterval)timeout
+{
+    dispatch_time_t deadline = (timeout < 0)
+        ? DISPATCH_TIME_FOREVER
+        : dispatch_time(DISPATCH_TIME_NOW, (int64_t)(timeout * NSEC_PER_SEC));
+    return dispatch_group_wait(_writeGroup, deadline) == 0;
 }
 
 // Runs on _queue.  Single-shot transition to invalid + fire handler.

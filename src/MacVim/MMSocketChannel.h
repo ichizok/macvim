@@ -55,6 +55,12 @@ extern NSString *MMFrontendSocketPath(void);
 /// private serial queue.
 - (void)sendFrame:(NSData *)payload;
 
+/// Block until every frame enqueued so far has been handed to the socket (or
+/// the timeout expires; negative means wait forever).  Returns YES if all
+/// pending writes completed.  Used to drain the channel before process exit
+/// so the peer sees the final messages before EOF.
+- (BOOL)flushWithTimeout:(NSTimeInterval)timeout;
+
 /// Tear down: cancel sources, close the fd, fire no further handlers.
 - (void)invalidate;
 
